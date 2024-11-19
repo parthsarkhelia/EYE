@@ -39,7 +39,7 @@ def get_email(context,token: str) -> (int, dict):
         response = response.json()
         logging.info(response)
         data = response["messages"]
-        next_token = response["nextPageToken"]
+        next_token = response.get("nextPageToken", "")
         while next_token != "" :
             #call the next batch
             params['pageToken'] = next_token 
@@ -51,7 +51,7 @@ def get_email(context,token: str) -> (int, dict):
             response = response.json()
             logging.info(response)
             data.extend(response["messages"])
-            next_token = response["nextPageToken"]
+            next_token = response.get("nextPageToken", "")
         #store to DB after processing
         Gmail_processor.gmail_processor(token, MONGO_URI, BureauEYEDB, data)
         return response.status_code, {"message": data}
