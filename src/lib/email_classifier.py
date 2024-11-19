@@ -50,53 +50,6 @@ class EmailAnalyzer:
                 "reference": r"(?:ref\.?(?:erence)?|txn|transaction)\s*(?:no\.?|id|number)[:\s]*([A-Z0-9]+)",
                 "status": r"(?:status|transaction\s+status)[:\s]*([A-Za-z]+)",
             },
-            "identity": {
-                "aadhaar": r"(?:aadhaar|aadhar|uid|आधार)[:\s]*(?:\d{4}\s*){3}\d{4}",
-                "pan": r"(?:pan|permanent\s+account\s+number)[:\s]*([A-Z]{5}\d{4}[A-Z])",
-                "gstin": r"(?:gstin|gst\s+no)[:\s]*\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]{3}",
-                "voter_id": r"(?:voter\s+id|epic\s+no)[:\s]*[A-Z]{3}\d{7}",
-                "driving_license": r"(?:dl\s+no|driving\s+licen[cs]e)[:\s]*(?:[A-Z]{2}20\d{14})",
-                "passport": r"(?:passport\s+no)[:\s]*[A-Z]\d{7}",
-                "otp": r"(?:OTP|one\s+time\s+password|verification\s+code|security\s+code)[:\s]*(\d{4,8})",
-                "mobile": r"(?:mobile|phone|contact)[:\s]*(?:\+91[\-\s]*)?(\d{10})",
-                "email": r"(?:email|e-mail)[:\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Z|a-z]{2,})",
-            },
-            "bank": {
-                "account": r"(?:a/c|account)\s*(?:no\.?|number)[:\s]*[Xx*]*(\d{4})",
-                "ifsc": r"(?:ifsc|ifsc\s+code)[:\s]*([A-Z]{4}0[A-Z0-9]{6})",
-                "branch": r"(?:branch)[:\s]*([A-Za-z\s]+)",
-                "balance": r"(?:balance|available\s+balance)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-            },
-            "spending": {
-                "transaction": r"(?:transaction|payment|purchase)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "merchant": r"(?:merchant|store|outlet)[:\s]*([A-Za-z0-9\s&]+)",
-                "category": r"(?:category|type)[:\s]*([A-Za-z\s]+)",
-                "payment_method": r"(?:card|upi|netbanking|wallet)",
-                "reward_points": r"(?:reward|points)[:\s]*(\d+)",
-                "cashback": r"cashback[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "discount": r"discount[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)|(\d+)%\s*(?:off|discount)",
-            },
-            "portfolio": {
-                "stock_symbol": r"(?:nse|bse)[:\s]*([A-Z]+)",
-                "quantity": r"(?:qty|quantity)[:\s]*(\d+)",
-                "price": r"(?:price|rate)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "transaction_type": r"(?:buy|sell|purchase|sale)",
-                "order_status": r"(?:executed|pending|cancelled|failed)",
-                "exchange": r"(?:nse|bse|nfo|mcx)",
-                "dividend": r"dividend[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "mutual_fund": r"(?:mutual\s+fund|mf)[:\s]*([A-Za-z0-9\s]+)",
-                "nav": r"nav[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-            },
-            "travel": {
-                "pnr": r"pnr[:\s]*([A-Z0-9]{10})",
-                "flight": r"(?:flight|carrier)[:\s]*([A-Z0-9\s]+)",
-                "train": r"(?:train|express|mail)[:\s]*(\d{5})",
-                "booking_id": r"booking[:\s]*(?:id|ref)[:\s]*([A-Z0-9]+)",
-                "source": r"(?:from|source)[:\s]*([A-Za-z\s]+)",
-                "destination": r"(?:to|destination)[:\s]*([A-Za-z\s]+)",
-                "travel_date": r"(?:travel|journey|flight|departure)\s*date[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{4})",
-                "amount": r"(?:fare|amount|price)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-            },
         }
 
     def _init_categories(self):
@@ -288,11 +241,50 @@ class EmailAnalyzer:
             "cash": ["cash", "cash deposit", "atm"],
         }
 
+    def _extract_pattern(self, text: str, pattern: str) -> Optional[str]:
+        match = re.search(pattern, text, re.IGNORECASE)
+        return match.group(1).strip() if match else None
+
+    def _extract_card_number(self, text: str) -> Optional[str]:
+        for pattern in self.patterns["credit_card"]["card_numbers"]:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1)
+        return None
+
+    def _extract_amount(self, text: str, pattern: str) -> Optional[float]:
+        match = re.search(pattern, text)
+        if match:
+            try:
+                return float(match.group(1).replace(",", ""))
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    def _extract_date(self, text: str, pattern: str) -> Optional[str]:
+        match = re.search(pattern, text)
+        if match:
+            try:
+                date_str = match.group(1)
+                for fmt in ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"]:
+                    try:
+                        return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
+                    except ValueError:
+                        continue
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    def _extract_rewards(self, content: str, card_info: Dict):
+        points_match = re.search(r"(?:reward|points)[:\s]*(\d+)", content)
+        if points_match:
+            card_info["reward_points"] += int(points_match.group(1))
+
     async def analyze_emails(self, emails: List[Dict]) -> Dict:
         try:
             results = {
                 "credit_analysis": self.analyze_credit_cards(emails),
-                # "spending_analysis": self.analyze_spending(emails),
+                "spending_analysis": self.analyze_spending(emails),
                 # "identity_analysis": self.analyze_identity(emails),
                 # "portfolio_analysis": self.analyze_portfolio(emails),
                 # "travel_analysis": self.analyze_travel(emails),
@@ -337,7 +329,8 @@ class EmailAnalyzer:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
             sender = email.get("sender", "").lower()
             date = email.get("date")
-            date = date.strftime("%Y-%m-%d %H:%M:%S")
+            if not isinstance(date, str):
+                date = date.strftime("%Y-%m-%d %H:%M:%S")
 
             # Skip promotional content
             if self._is_credit_card_promotional(content):
@@ -523,13 +516,18 @@ class EmailAnalyzer:
             "apply now",
             "pre-approved",
             "upgrade your card",
+            "voucher",
+            "gift",
+            "benefit",
+            "redeem",
+            "LPA",
+            "CTC",
+            "dream",
+            "tickets",
+            "hiring",
+            "loan",
         ]
         return any(keyword in content.lower() for keyword in promo_keywords)
-
-    def _extract_rewards(self, content: str, card_info: Dict):
-        points_match = re.search(r"(?:reward|points)[:\s]*(\d+)", content)
-        if points_match:
-            card_info["reward_points"] += int(points_match.group(1))
 
     def _process_transaction(self, content: str, date: str, card_info: Dict):
         amount = self._extract_amount(
@@ -612,13 +610,9 @@ class EmailAnalyzer:
                     "date": date,
                     "amount": amount,
                     "type": "credit",
-                    "mode": self._extract_payment_mode(content),
+                    "mode": self._identify_payment_mode(content),
                 }
             )
-
-    def _extract_payment_mode(self, content: str) -> str:
-        mode_match = re.search(self.patterns["credit_card"]["payment_mode"], content)
-        return mode_match.group(1).strip().lower() if mode_match else "unknown"
 
     def _calculate_card_metrics(self, card_info: Dict):
         if not card_info.get("statements"):
@@ -652,158 +646,326 @@ class EmailAnalyzer:
         }
 
     def analyze_spending(self, emails: List[Dict]) -> Dict:
-        spending = {
-            "by_category": defaultdict(float),
-            "by_merchant": defaultdict(float),
-            "monthly": defaultdict(float),
-            "transactions": [],
+        spending_info = {
+            "categories": defaultdict(
+                lambda: {
+                    "total_spend": 0,
+                    "transaction_count": 0,
+                    "merchants": defaultdict(int),
+                    "monthly_trends": defaultdict(float),
+                    "average_transaction": 0,
+                    "largest_transaction": 0,
+                    "recent_transactions": [],
+                }
+            ),
+            "overall": {
+                "total_spend": 0,
+                "total_transactions": 0,
+                "monthly_totals": defaultdict(float),
+                "peak_spending_month": None,
+                "top_merchants": [],
+            },
         }
 
+        # Process each email for spending information
+        spending_emails = []
+
         for email in emails:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
             date = email.get("date")
 
-            # Extract transactions
-            txn_matches = re.finditer(self.patterns["transaction"]["amount"], content)
-            for match in txn_matches:
-                amount = float(match.group(1).replace(",", ""))
-                merchant = match.group(2).strip()
+            # Skip the transactions which are credit-card payment confirmation
+            if self._is_credit_card_payment_confirmation(content):
+                continue
 
-                # Categorize transaction
-                category = self._categorize_merchant(merchant)
+            # Skip non-transaction emails
+            if not self._is_transaction_email(content):
+                continue
 
-                if amount > 0:
-                    spending["by_category"][category] += amount
-                    spending["by_merchant"][merchant] += amount
+            # Skip promotional content
+            if self._is_credit_card_promotional(content):
+                continue
 
-                    if date:
-                        month_key = pd.to_datetime(date).strftime("%Y-%m")
-                        spending["monthly"][month_key] += amount
+            # Extract transaction details
+            transaction = self._extract_transaction_details(content, date)
+            if not transaction:
+                continue
 
-                    spending["transactions"].append(
-                        {
-                            "date": date,
-                            "amount": amount,
-                            "merchant": merchant,
-                            "category": category,
-                        }
+            spending_emails.append(email)
+
+            # Update category-specific metrics
+            self._update_category_metrics(transaction, spending_info)
+
+            # Update overall spending metrics
+            self._update_overall_metrics(transaction, spending_info)
+
+        # Post-processing calculations
+        self._calculate_spending_metrics(spending_info)
+
+        logging.info(
+            {
+                "message": "Spending analysis completed",
+                "total_emails": len(emails),
+                "transaction_emails": len(spending_emails),
+                "spending_emails": spending_emails,
+            }
+        )
+        return spending_info
+
+    def _is_transaction_email(self, content: str) -> bool:
+        transaction_indicators = [
+            "transaction",
+            "payment",
+            "spent",
+            "paid",
+            "purchase",
+            "debit",
+            "credited",
+            "charged",
+            "authorized",
+            "₹",
+            "rs.",
+            "inr",
+            "amount",
+        ]
+        content_lower = content.lower()
+        return any(indicator in content_lower for indicator in transaction_indicators)
+
+    def _categorize_merchant(self, merchant: str) -> str:
+        if not merchant:
+            return "others"
+
+        merchant_lower = merchant.lower()
+
+        # Skip categorization for unknown merchants
+        if merchant_lower in ["unknown", "unknown merchant", "n/a"]:
+            return "others"
+
+        # Check each category's keywords
+        for category, keywords in self.categories.items():
+            if category != "credit_cards":  # Skip credit cards category
+                if any(keyword.lower() in merchant_lower for keyword in keywords):
+                    return category
+
+        return "others"
+
+    def _extract_transaction_details(self, content: str, date: str) -> Optional[Dict]:
+        try:
+            # Extract amount
+            amount = self._extract_amount(
+                content, self.patterns["transaction"]["amount"]
+            )
+            if not amount:
+                return None
+
+            # Extract merchant
+            merchant = self._extract_pattern(
+                content, self.patterns["transaction"]["merchant"]
+            )
+            if not merchant:
+                merchant = self._extract_pattern(
+                    content, self.patterns["transaction"]["merchant_alt"]
+                )
+            if not merchant:
+                merchant = "unknown"
+
+            # Categorize merchant
+            category = self._categorize_merchant(merchant)
+
+            # Extract reference and status
+            reference = self._extract_pattern(
+                content, self.patterns["transaction"]["reference"]
+            )
+            status = self._extract_pattern(
+                content, self.patterns["transaction"]["status"]
+            )
+
+            # Build transaction detail dictionary
+            transaction_details = {
+                "date": date,
+                "amount": float(amount),  # Ensure amount is float
+                "merchant": merchant,
+                "category": category,
+                "reference": reference if reference else "N/A",
+                "status": status if status else "completed",
+                "payment_mode": self._identify_payment_mode(content),
+            }
+
+            return transaction_details
+
+        except Exception as e:
+            logging.error(f"Error extracting transaction details: {str(e)}")
+            return None
+
+    def _update_category_metrics(
+        self, transaction: Optional[Dict], spending_info: Dict
+    ):
+        if not transaction or not isinstance(transaction, dict):
+            return
+
+        try:
+            category = transaction.get("category", "others")
+            amount = transaction.get("amount", 0.0)
+            date = transaction.get("date")
+            merchant = transaction.get("merchant", "Unknown")
+
+            if not all([category, amount, date, merchant]):
+                return
+
+            category_data = spending_info["categories"][category]
+
+            # Update basic metrics
+            category_data["total_spend"] += float(amount)
+            category_data["transaction_count"] += 1
+            category_data["merchants"][merchant] += 1
+
+            # Update monthly trends
+            try:
+                month_key = pd.to_datetime(date).strftime("%Y-%m")
+                category_data["monthly_trends"][month_key] += float(amount)
+            except Exception as e:
+                logging.error(f"Error processing date in category metrics: {str(e)}")
+
+            # Update transaction extremes
+            category_data["largest_transaction"] = max(
+                category_data["largest_transaction"], float(amount)
+            )
+
+            # Keep track of recent transactions (last 5)
+            category_data["recent_transactions"].append(
+                {
+                    "date": date.strftime("%Y-%m-%d"),
+                    "amount": float(amount),
+                    "merchant": merchant,
+                }
+            )
+
+            # Sort and limit recent transactions
+            category_data["recent_transactions"] = sorted(
+                category_data["recent_transactions"],
+                key=lambda x: pd.to_datetime(x["date"]),
+                reverse=True,
+            )[:5]
+
+        except Exception as e:
+            logging.error(f"Error updating category metrics: {str(e)}")
+
+    def _identify_payment_mode(self, content: str) -> str:
+        content_lower = content.lower()
+
+        for mode, keywords in self.payment_modes.items():
+            if any(keyword in content_lower for keyword in keywords):
+                return mode
+
+        return "unknown"
+
+    def _update_overall_metrics(self, transaction: Dict, spending_info: Dict):
+        amount = transaction["amount"]
+        date = transaction["date"]
+
+        overall = spending_info["overall"]
+
+        # Update totals
+        overall["total_spend"] += amount
+        overall["total_transactions"] += 1
+
+        # Update time-based metrics
+        month_key = date.strftime("%Y-%m")
+
+        overall["monthly_totals"][month_key] += amount
+
+        if (
+            not overall["peak_spending_month"]
+            or overall["monthly_totals"][month_key]
+            > overall["monthly_totals"][overall["peak_spending_month"]]
+        ):
+            overall["peak_spending_month"] = month_key
+
+    def _calculate_spending_metrics(self, spending_info: Dict):
+        try:
+            # Calculate category averages and percentages
+            total_spend = spending_info["overall"]["total_spend"]
+
+            # Process category-specific metrics
+            for category_data in spending_info["categories"].values():
+                if category_data["transaction_count"] > 0:
+                    # Calculate average transaction amount
+                    category_data["average_transaction"] = round(
+                        category_data["total_spend"]
+                        / category_data["transaction_count"],
+                        2,
                     )
 
-        return dict(spending)
+                    # Calculate percentage of total spend
+                    category_data["spend_percentage"] = round(
+                        (category_data["total_spend"] / total_spend) * 100, 2
+                    )
 
-    def analyze_identity(self, emails: List[Dict]) -> Dict:
-        identity = {"verifications": [], "otps": [], "documents": defaultdict(list)}
+                    # Convert merchant tuples to structured dictionaries
+                    merchant_items = sorted(
+                        category_data["merchants"].items(),
+                        key=lambda x: x[1],
+                        reverse=True,
+                    )[:5]
 
-        for email in emails:
-            content = f"{email.get('subject', '')} {email.get('content', '')}"
-            date = email.get("date")
+                    category_data["top_merchants"] = [
+                        {
+                            "name": merchant,
+                            "transactions": count,
+                            "percentage": round(
+                                (count / category_data["transaction_count"]) * 100, 2
+                            ),
+                        }
+                        for merchant, count in merchant_items
+                    ]
 
-            # Extract OTPs
-            otp_match = re.search(self.patterns["identity"]["otp"], content)
-            if otp_match:
-                identity["otps"].append(
+            # Calculate overall merchant metrics
+            all_merchants = defaultdict(
+                lambda: {"count": 0, "total_amount": 0, "categories": set()}
+            )
+
+            for category, data in spending_info["categories"].items():
+                for transaction in data.get("recent_transactions", []):
+                    merchant = transaction.get("merchant")
+                    if merchant:
+                        all_merchants[merchant]["count"] += 1
+                        all_merchants[merchant]["total_amount"] += transaction.get(
+                            "amount", 0
+                        )
+                        all_merchants[merchant]["categories"].add(category)
+
+            # Convert to list and sort by transaction count
+            top_merchants = sorted(
+                [
                     {
-                        "date": date,
-                        "sender": email.get("sender"),
-                        "otp": otp_match.group(1),
+                        "name": merchant,
+                        "transaction_count": data["count"],
+                        "total_spent": round(data["total_amount"], 2),
+                        "average_transaction": round(
+                            data["total_amount"] / data["count"], 2
+                        ),
+                        "categories": list(data["categories"]),
+                        "percentage": round(
+                            (
+                                data["count"]
+                                / spending_info["overall"]["total_transactions"]
+                            )
+                            * 100,
+                            2,
+                        ),
                     }
-                )
+                    for merchant, data in all_merchants.items()
+                ],
+                key=lambda x: x["transaction_count"],
+                reverse=True,
+            )[:10]
 
-            # Extract document verifications
-            for doc_type, pattern in [
-                ("aadhaar", self.patterns["identity"]["aadhaar"]),
-                ("pan", self.patterns["identity"]["pan"]),
-            ]:
-                if re.search(pattern, content):
-                    identity["documents"][doc_type].append(
-                        {
-                            "date": date,
-                            "sender": email.get("sender"),
-                            "status": self._extract_verification_status(content),
-                        }
-                    )
+            spending_info["overall"]["top_merchants"] = top_merchants
 
-        return dict(identity)
-
-    def analyze_portfolio(self, emails: List[Dict]) -> Dict:
-        portfolio = {
-            "transactions": [],
-            "holdings": defaultdict(float),
-            "notifications": [],
-        }
-
-        for email in emails:
-            content = f"{email.get('subject', '')} {email.get('content', '')}"
-            date = email.get("date")
-
-            # Extract trading activity
-            if any(
-                term in content.lower()
-                for term in ["trade", "buy", "sell", "purchased", "sold"]
-            ):
-                price_match = re.search(self.patterns["portfolio"]["price"], content)
-                qty_match = re.search(self.patterns["portfolio"]["quantity"], content)
-
-                if price_match and qty_match:
-                    portfolio["transactions"].append(
-                        {
-                            "date": date,
-                            "price": float(price_match.group(1).replace(",", "")),
-                            "quantity": int(qty_match.group(1)),
-                            "type": "buy" if "buy" in content.lower() else "sell",
-                        }
-                    )
-
-        return portfolio
-
-    def analyze_travel(self, emails: List[Dict]) -> Dict:
-        travel = {
-            "flights": [],
-            "hotels": [],
-            "transport": [],
-            "locations": defaultdict(int),
-            "routes": defaultdict(int),
-        }
-
-        for email in emails:
-            content = f"{email.get('subject', '')} {email.get('content', '')}"
-            date = email.get("date")
-
-            # Extract flight information
-            flight_match = re.search(self.patterns["travel"]["flight"], content)
-            if flight_match:
-                source_dest_match = re.search(
-                    self.patterns["travel"]["source_dest"], content
-                )
-                if source_dest_match:
-                    source = source_dest_match.group(1).strip()
-                    dest = source_dest_match.group(2).strip()
-
-                    travel["flights"].append(
-                        {
-                            "date": date,
-                            "flight": flight_match.group(1),
-                            "source": source,
-                            "destination": dest,
-                        }
-                    )
-
-                    travel["locations"][source] += 1
-                    travel["locations"][dest] += 1
-                    travel["routes"][f"{source}-{dest}"] += 1
-
-            # Extract hotel stays
-            hotel_match = re.search(self.patterns["travel"]["hotel"], content)
-            if hotel_match:
-                travel["hotels"].append(
-                    {
-                        "date": date,
-                        "hotel": hotel_match.group(1).strip(),
-                        "location": self._extract_location(content),
-                    }
-                )
-
-        return travel
+        except Exception as e:
+            logging.error(f"Error calculating spending metrics: {str(e)}")
+            # Ensure we have at least empty structures
+            spending_info["overall"]["top_merchants"] = []
 
     def generate_insights(self, analysis_results: Dict) -> List[str]:
         insights = []
@@ -824,67 +986,6 @@ class EmailAnalyzer:
             insights.extend(self._generate_travel_insights(travel))
 
         return insights
-
-    def _extract_pattern(self, text: str, pattern: str) -> Optional[str]:
-        match = re.search(pattern, text, re.IGNORECASE)
-        return match.group(1).strip() if match else None
-
-    def _extract_card_number(self, text: str) -> Optional[str]:
-        for pattern in self.patterns["credit_card"]["card_numbers"]:
-            match = re.search(pattern, text)
-            if match:
-                return match.group(1)
-        return None
-
-    def _extract_amount(self, text: str, pattern: str) -> Optional[float]:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                return float(match.group(1).replace(",", ""))
-            except (ValueError, IndexError):
-                return None
-        return None
-
-    def _extract_date(self, text: str, pattern: str) -> Optional[str]:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                date_str = match.group(1)
-                for fmt in ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"]:
-                    try:
-                        return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
-                    except ValueError:
-                        continue
-            except (ValueError, IndexError):
-                return None
-        return None
-
-    def _categorize_merchant(self, merchant: str) -> str:
-        merchant_lower = merchant.lower()
-
-        for category, keywords in self.categories.items():
-            if any(keyword in merchant_lower for keyword in keywords):
-                return category
-
-        return "others"
-
-    def _extract_verification_status(self, text: str) -> str:
-        status_keywords = {
-            "success": ["successful", "completed", "verified"],
-            "failure": ["failed", "rejected", "unsuccessful"],
-            "pending": ["pending", "in process", "initiated"],
-        }
-
-        text_lower = text.lower()
-        for status, keywords in status_keywords.items():
-            if any(keyword in text_lower for keyword in keywords):
-                return status
-
-        return "unknown"
-
-    def _extract_location(self, text: str) -> Optional[str]:
-        # Add location extraction logic here
-        return None
 
     def _generate_credit_insights(self, credit_data: Dict) -> List[str]:
         insights = []
@@ -919,109 +1020,119 @@ class EmailAnalyzer:
 
     def _generate_spending_insights(self, spending_data: Dict) -> List[str]:
         insights = []
+        categories = spending_data.get("categories", {})
+        overall = spending_data.get("overall", {})
 
-        # Category analysis
-        if spending_data["by_category"]:
-            total_spent = sum(spending_data["by_category"].values())
-            insights.append(f"Total spending: ₹{total_spent:,.2f}")
+        # Skip if no spending data
+        if not overall.get("total_spend"):
+            return ["No spending data available for analysis."]
 
-            # Top categories
-            top_categories = sorted(
-                spending_data["by_category"].items(), key=lambda x: x[1], reverse=True
-            )[:3]
-            cat_text = ", ".join(f"{cat}: ₹{amt:,.2f}" for cat, amt in top_categories)
-            insights.append(f"Top spending categories: {cat_text}")
+        try:
+            # Overall spending insights
+            total_spend = overall["total_spend"]
+            total_transactions = overall["total_transactions"]
+            insights.append(
+                f"Total spending: ₹{total_spend:,.2f} across {total_transactions} transactions"
+            )
 
-            # Monthly trend
-            if spending_data["monthly"]:
-                months = sorted(spending_data["monthly"].items())
-                if len(months) > 1:
-                    latest = months[-1][1]
-                    previous = months[-2][1]
-                    change = (latest - previous) / previous * 100
+            # Monthly average and peak spending
+            monthly_totals = overall.get("monthly_totals", {})
+            if monthly_totals:
+                avg_monthly = total_spend / max(len(monthly_totals), 1)
+                insights.append(f"Average monthly spending: ₹{avg_monthly:,.2f}")
+
+                peak_month = overall.get("peak_spending_month")
+                if peak_month:
+                    peak_amount = monthly_totals[peak_month]
                     insights.append(
-                        f"Monthly spending {'increased' if change > 0 else 'decreased'} by {abs(change):.1f}%"
+                        f"Highest spending in {peak_month}: ₹{peak_amount:,.2f}"
                     )
 
-        return insights
-
-    def _generate_travel_insights(self, travel_data: Dict) -> List[str]:
-        insights = []
-
-        if travel_data["flights"]:
-            total_flights = len(travel_data["flights"])
-            insights.append(f"Total flights: {total_flights}")
-
-            # Popular routes
-            if travel_data["routes"]:
-                top_routes = sorted(
-                    travel_data["routes"].items(), key=lambda x: x[1], reverse=True
-                )[:3]
-                routes_text = ", ".join(
-                    f"{route}: {count}x" for route, count in top_routes
-                )
-                insights.append(f"Most frequent routes: {routes_text}")
-
-            # Location frequency
-            if travel_data["locations"]:
-                top_locations = sorted(
-                    travel_data["locations"].items(), key=lambda x: x[1], reverse=True
-                )[:3]
-                loc_text = ", ".join(f"{loc}: {count}x" for loc, count in top_locations)
-                insights.append(f"Most visited: {loc_text}")
-
-        return insights
-
-    def generate_heatmap_data(self, travel_data: Dict) -> List[Dict]:
-        heatmap_data = []
-
-        # Process routes for heatmap
-        for route, frequency in travel_data["routes"].items():
-            source, destination = route.split("-")
-            heatmap_data.append(
-                {
-                    "source": source.strip(),
-                    "destination": destination.strip(),
-                    "weight": frequency,
-                    "value": frequency * 100,  # Scale for visualization
-                }
-            )
-
-        return heatmap_data
-
-    def analyze_portfolio_metrics(self, portfolio_data: Dict) -> Dict:
-        metrics = {
-            "total_transactions": len(portfolio_data["transactions"]),
-            "buy_sell_ratio": 0,
-            "average_transaction_size": 0,
-            "position_changes": [],
-        }
-
-        if portfolio_data["transactions"]:
-            buys = sum(1 for t in portfolio_data["transactions"] if t["type"] == "buy")
-            sells = len(portfolio_data["transactions"]) - buys
-            metrics["buy_sell_ratio"] = buys / sells if sells > 0 else float("inf")
-
-            # Calculate average transaction size
-            total_value = sum(
-                t["price"] * t["quantity"] for t in portfolio_data["transactions"]
-            )
-            metrics["average_transaction_size"] = total_value / len(
-                portfolio_data["transactions"]
-            )
-
-            # Track position changes
-            sorted_txns = sorted(
-                portfolio_data["transactions"], key=lambda x: x["date"]
-            )
-            for txn in sorted_txns:
-                metrics["position_changes"].append(
-                    {
-                        "date": txn["date"],
-                        "value_change": txn["price"]
-                        * txn["quantity"]
-                        * (1 if txn["type"] == "buy" else -1),
-                    }
+            # Category-wise analysis
+            if categories:
+                # Sort categories by total spend
+                sorted_categories = sorted(
+                    categories.items(), key=lambda x: x[1]["total_spend"], reverse=True
                 )
 
-        return metrics
+                # Top spending categories
+                top_categories = sorted_categories[:3]
+                for category, data in top_categories:
+                    spend_percentage = (data["total_spend"] / total_spend) * 100
+                    insights.append(
+                        f"{category.replace('_', ' ').title()}: ₹{data['total_spend']:,.2f} "
+                        f"({spend_percentage:.1f}% of total)"
+                    )
+
+                # Largest single transactions
+                for category, data in sorted_categories:
+                    if (
+                        data["largest_transaction"] > total_spend * 0.1
+                    ):  # Significant transactions
+                        insights.append(
+                            f"Large {category.replace('_', ' ')} transaction: "
+                            f"₹{data['largest_transaction']:,.2f}"
+                        )
+
+            # Spending pattern insights
+            if monthly_totals:
+                months = sorted(monthly_totals.keys())
+                if len(months) >= 2:
+                    latest_month = months[-1]
+                    previous_month = months[-2]
+                    month_over_month = (
+                        (monthly_totals[latest_month] - monthly_totals[previous_month])
+                        / monthly_totals[previous_month]
+                        * 100
+                    )
+                    if abs(month_over_month) > 20:  # Significant change
+                        change = "increased" if month_over_month > 0 else "decreased"
+                        insights.append(
+                            f"Spending {change} by {abs(month_over_month):.1f}% "
+                            f"compared to previous month"
+                        )
+
+            # Category-specific insights
+            for category, data in categories.items():
+                # High frequency categories
+                if data["transaction_count"] >= 10:
+                    avg_transaction = data["total_spend"] / data["transaction_count"]
+                    insights.append(
+                        f"Average {category.replace('_', ' ')} transaction: ₹{avg_transaction:,.2f}"
+                    )
+
+                # Merchant concentration
+                top_merchants = data.get("top_merchants", [])
+                if top_merchants:
+                    # Using the new dictionary structure
+                    top_merchant = top_merchants[0]  # First merchant in the list
+                    merchant_name = top_merchant.get("name", "Unknown")
+                    transaction_count = top_merchant.get("transactions", 0)
+
+                    if data["transaction_count"] > 0:
+                        merchant_percentage = (
+                            transaction_count / data["transaction_count"]
+                        ) * 100
+                        if merchant_percentage > 50:
+                            insights.append(
+                                f"Most frequent {category.replace('_', ' ')} merchant: "
+                                f"{merchant_name} ({merchant_percentage:.1f}% of transactions)"
+                            )
+
+            # Add insights about top overall merchants
+            top_overall_merchants = overall.get("top_merchants", [])
+            if top_overall_merchants:
+                top_merchant = top_overall_merchants[0]
+                insights.append(
+                    f"Most used merchant: {top_merchant['name']} "
+                    f"(₹{top_merchant['total_spent']:,.2f} across "
+                    f"{top_merchant['transaction_count']} transactions)"
+                )
+
+        except Exception as e:
+            logging.error(f"Error generating spending insights: {str(e)}")
+            insights.append(
+                "Unable to generate complete spending insights due to an error."
+            )
+
+        return insights
