@@ -1,6 +1,6 @@
 import json
 import logging
-
+import threading
 import httpx
 
 from src.core import encode_access_token, mongo
@@ -39,6 +39,11 @@ def get_google_auth_url(context) -> (int, dict):
         logging.exception({**context, "message": "Error while generating auth URL"})
         return 400, {"message": constant.PROCESSING_ERROR}
 
+# BAckground task for the fetching the email and starting the processing
+def background_task(context, access_token):
+    # call get email
+    status_code, resp = get_email(context, access_token)
+    logging.info({"getEmailOutput": resp, "status": status_code})
 
 def authenticate_google_user(context, code: str) -> (int, dict):
     try:
@@ -73,11 +78,12 @@ def authenticate_google_user(context, code: str) -> (int, dict):
             )
             return 400, {"message": constant.PROCESSING_ERROR}
         
-        
-        headers = {"Authorization": f"Bearer {access_token}"}
-        # call get email
-        status_code, resp = get_email(context, access_token)
-        logging.info({"getEmailOutput": resp})
+        # Start the background task for fetching and processing the email
+        thread = threading.Thread(target=background_task, daemon=True)
+        thread.start()
+
+        # headers = {"Authorization": f"Bearer {access_token}"}
+
         
         # user_info_response = httpx.get(USER_INFO_URL, headers=headers, timeout=25)
         # if user_info_response.status_code != 200:

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import requests
 from pydantic import BaseModel
 from pymongo import MongoClient
-
+from src.controller.email_analysis import create_analysis_from_stored_emails, StoredEmailAnalysisRequest
 
 class EmailData(BaseModel):
     subject: str
@@ -196,7 +196,7 @@ class GmailFetcher:
             "failed_ids": [],
             "unique_id": unique_id,
         }
-        logging.info("In process message")
+        # logging.info("In process message")
         for idx, message in enumerate(message_list):
             message_id = message["id"]
             print(f"Processing message {idx + 1}/{len(message_list)}: {message_id}")
@@ -224,11 +224,11 @@ class GmailFetcher:
 
         # Cleanup raw emails after successful processing
         self.cleanup_raw_emails(unique_id)
-        logging.info("Cleaned Up Raw Email")
-        logging.info({"unique_id":unique_id})
+        # logging.info("Cleaned Up Raw Email")
+        # logging.info({"unique_id":unique_id})
         return results
 
-def gmail_processor(access_token: str, mongoUri: str, dbName: str, data: List[Dict]):
+def gmail_processor(context, access_token: str, mongoUri: str, dbName: str, data: List[Dict]):
 
     # Initialize fetcher
     fetcher = GmailFetcher(access_token, mongoUri, dbName)
@@ -246,3 +246,10 @@ def gmail_processor(access_token: str, mongoUri: str, dbName: str, data: List[Di
         print("\nFailed message IDs:")
         for failed_id in results["failed_ids"]:
             print(f"- {failed_id}")
+    # Initialize StoredEmailAnalysisRequest
+    request = StoredEmailAnalysisRequest(
+        unique_id=results["unique_id"],
+        user_id="user001",
+        settings={}
+    )
+    create_analysis_from_stored_emails(context, request)

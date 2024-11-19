@@ -53,7 +53,7 @@ def get_email(context,token: str) -> (int, dict):
             data.extend(response["messages"])
             next_token = response.get("nextPageToken", "")
         #store to DB after processing
-        Gmail_processor.gmail_processor(token, MONGO_URI, BureauEYEDB, data)
+        Gmail_processor.gmail_processor(context, token, MONGO_URI, BureauEYEDB, data)
         return response.status_code, {"message": data}
     except Exception:
         logging.exception({**context, "message": "Error while getting email"})
