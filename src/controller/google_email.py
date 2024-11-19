@@ -24,7 +24,10 @@ def get_email(context,token: str) -> (int, dict):
     try:
         logging.info("Starting to get email")
         headers = {"Authorization":"Bearer "+token}
-        response = httpx.get(EMAIL_URL, headers=headers, timeout=25)
+        params = {
+            'q': 'newer_than:20d',
+        }
+        response = httpx.get(EMAIL_URL, headers=headers, timeout=25, params=params)
         logging.info("response")
         logging.info(response)
         # Check if the response status code is not 200 OK
@@ -39,7 +42,8 @@ def get_email(context,token: str) -> (int, dict):
         next_token = response["nextPageToken"]
         while next_token != "" :
             #call the next batch
-            response = httpx.get(EMAIL_URL+"?pageToken="+next_token, headers=headers, timeout=25)
+            params['pageToken'] = next_token 
+            response = httpx.get(EMAIL_URL, headers=headers, timeout=25, params=params)
             if response.status_code != 200:
                 logging.error(
                     {**context, "message": f"Error fetching token: {response.text}"}
