@@ -55,35 +55,3 @@ def get_email(context,token: str) -> (int, dict):
         logging.exception({**context, "message": "Error while getting email"})
         frontend_redirect_url = f"{SOCIAL_AUTH_REDIRECTION_URL}?status=FAILURE"
         return 302, {"location": frontend_redirect_url}
-
-
-def store_google_user(context, user_info: GoogleUserInfo):
-    try:
-        # Check if a user with the given email already exists
-        existing_user = GoogleUser.find_by_email(user_info.email)
-        if not existing_user:
-            # Create a new GoogleUser instance
-            new_google_user = GoogleUser(
-                username=user_info.email,
-                email=user_info.email,
-                first_name=user_info.given_name,
-                last_name=user_info.family_name,
-                google_id=user_info.sub,
-                picture=user_info.picture,
-                locale=user_info.locale,
-            )
-
-            # Save the new user to the database
-            new_google_user.save()
-
-            # Store complete Google profile information in SocialAuth collection
-            social_auth_data = user_info.dict()
-            social_auth_data["platform"] = "Google"
-            mongo.social_auth_collection.insert_one(social_auth_data)
-            username = new_google_user.username
-        else:
-            username = existing_user.username
-        logging.info({**context, "message": "Google user stored successfully"})
-        return username
-    except Exception:
-        logging.exception({**context, "message": "Error while storing Google user"})
