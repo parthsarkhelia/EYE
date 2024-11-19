@@ -43,6 +43,10 @@ def get_secrets():
         "google_redirect_uri": os.environ.get("GOOGLE_REDIRECT_URI"),
         "google_token_url": os.environ.get("GOOGLE_TOKEN_URL"),
         "google_user_info_url": os.environ.get("GOOGLE_USER_INFO_URL"),
+        # Device Decryption Keys
+        "aes256_key" : os.environ.get("AES256_KEY"),
+        "aes256_iv" : os.environ.get("AES256_IV"),
+        "rsa_private_key" : os.environ.get("RSA_PRIVATE_KEY"),
     }
     return secrets_data
 

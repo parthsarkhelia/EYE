@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from src.lib.email_classifier import EmailAnalyzer
 from src.middleware import LoggingMiddleware, RequestIDMiddleware
-from src.routes import email_analysis, google_auth
+from src.routes import email_analysis, google_auth, device_data
 from src.secrets import secrets
 from src.utils.init_models import ModelSetup
 
@@ -104,5 +104,8 @@ router.include_router(
 )
 router.include_router(
     email_analysis.router, prefix="/email-analysis", tags=["Email Analysis"]
+)
+router.include_router(
+    device_data.router, prefix="/device", tags=["Bureau Eye Submit"]
 )
 app.include_router(router)
