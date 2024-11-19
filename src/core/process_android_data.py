@@ -61,7 +61,7 @@ async def get_device_insights(
     try: 
         url = "https://api.stg.bureau.id/v1/deviceService/deviceData/android"
         user_ip = device_data["networkInfo_"]["iPV4_"]
-        session_id = uuid.uuid4() # todo: add uniqueness in SDK
+        session_id = str(uuid.uuid4()) # todo: add uniqueness in SDK
         device_data['sessionId_'] = session_id
         
         headers = {
@@ -148,8 +148,6 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
         
         if '@' not in email:
             raise ValueError("Invalid email format")
-        
-        print("Split ho gaya oye!")
         
         return name, phone_number, email
         

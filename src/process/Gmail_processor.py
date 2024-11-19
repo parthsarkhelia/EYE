@@ -3,6 +3,7 @@ import email
 import json
 import re
 import time
+import logging
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -195,7 +196,7 @@ class GmailFetcher:
             "failed_ids": [],
             "unique_id": unique_id,
         }
-
+        logging.info("In process message")
         for idx, message in enumerate(message_list):
             message_id = message["id"]
             print(f"Processing message {idx + 1}/{len(message_list)}: {message_id}")
@@ -223,9 +224,9 @@ class GmailFetcher:
 
         # Cleanup raw emails after successful processing
         self.cleanup_raw_emails(unique_id)
-
+        logging.info("Cleaned Up Raw Email")
+        logging.info({"unique_id":unique_id})
         return results
-
 
 def gmail_processor(access_token: str, mongoUri: str, dbName: str, data: List[Dict]):
 
