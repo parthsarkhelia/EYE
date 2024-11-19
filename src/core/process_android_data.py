@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Optional
 from datetime import datetime
 import uuid
-from src.utils import utils,parallel
+from src.utils import constant, utils,parallel, computation
 import requests
 import logging   
 from src.secrets import secrets
@@ -19,9 +19,6 @@ async def bureau_eye_submit(
 ) -> Dict:
     try:
         """Process Android device data and perform necessary operations"""
-        package_name_list = utils.get_package_names(device_data["packageManagerInfo_"]["userApplicationList_"])
-        carrier_info = device_data["systemProperties_"]["systemProperties"]
-        userId = device_data["userId_"]
         device_fingerprint_response = await get_device_insights(device_data=device_data,auth_credential=auth_credential)
         
         if device_fingerprint_response[KEY_STATUS] != KEY_SUCCESS:
@@ -31,20 +28,46 @@ async def bureau_eye_submit(
                 message=f"Failed to fetch device insights: {device_fingerprint_response["message"]}",
                 response=device_fingerprint_response
             )
-        logging.info("succesfully fetched device insights!") 
+            
+        package_name_list = utils.get_package_names(device_data["packageManagerInfo_"]["userApplicationList_"])
+        carrier_info = device_data["systemProperties_"]["systemProperties"]
+        userId = device_data["userId_"]
+            
+        logging.info({"message":"succesfully fetched device insights!","response":device_fingerprint_response})
         
         name, phone_number, email = await get_user_details_from_userId(userId)
 
         alt_data_requests = parallel.get_alt_data_requests(phone_number,name,email)
 
         service_response= await parallel.get_alternate_service_response(alt_data_requests)
+        
+        logging.info({"message":"succesfully fetched alternate data response!"}) 
 
         risk_model_response=parallel.get_risk_service_response(service_response=service_response,phone_number=phone_number,name=name,email=email)
-        logging.info({"risk_model_response":risk_model_response})
         
-        signals_output = parallel.get_signals_response(service_response=service_response,risk_model_response=risk_model_response)
         if risk_model_response==None:
             raise Exception("Didn't get response from risk model")
+        
+        logging.info({"message":"succesfully fetched risk model response!"}) 
+        signals_output = parallel.get_signals_response(service_response=service_response,risk_model_response=risk_model_response)
+        account_list = utils.get_account_list(signals_output)
+        final_score_response = computation.calculate_final_score(
+            alternate_risk_score=signals_output[constant.ALTERNATE_RISK_SCORE],
+            device_risk_level=device_fingerprint_response["riskLevel"],
+            name_from_input=name,
+            name_from_alt_data=signals_output[constant.NAME],
+            network_from_device=carrier_info,
+            network_from_alt_data=signals_output[constant.CURRENT_NETWORK_NAME],
+            downloaded_apps=package_name_list,
+            account_apps=account_list,
+        )
+        
+        logging.info({
+            "message":"succesfully computed final score",
+            "final_score":final_score_response["final_score"],
+        })
+        
+        return utils.create_response(status=KEY_SUCCESS,message="succesfully computed final score",response=final_score_response.json())
         
     except Exception as e:
         return utils.create_response(

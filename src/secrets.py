@@ -37,6 +37,7 @@ def get_secrets():
         "email_analysis_collection": os.environ.get("EMAIL_ANALYSIS_COLLECTION"),
         "raw_emails": os.environ.get("RAW_EMAILS_COLLECTION"),
         "processed_emails": os.environ.get("PROCESSED_EMAILS_COLLECTION"),
+        "user_evaluation_collection": os.environ.get("USER_EVALUATION_COLLECTION"),
         # Social Auths Variable
         "social_auth_redirection_url": os.environ.get("SOCIAL_AUTH_REDIRECTION_URL"),
         "google_client_id": os.environ.get("GOOGLE_CLIENT_ID"),

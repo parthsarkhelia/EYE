@@ -17,23 +17,23 @@ def calculate_input_validation_score(
 ) -> float:
     """Calculate identity matching score with penalties"""
     score = 0
-    
-    for field in identity1.keys():
-        if not identity1[field] in identity2[field]:
-            score += 1000/len(identity2.keys())
-    
+    if not identity1.lower() in identity2.lower():
+        score += 100
     return score
 
 def calculate_network_validation_score(
-    profile1,
-    profile2,
+    network_from_device, network_from_alt_data
 ) -> float:
     score = 0
-    
-    for field in profile1.keys():
-        if profile1[field] != profile2[field]:
-            score += 1000/len(profile2.keys())
-    
+    vi_names_list = ["vi","vodafone","idea"]
+    lower_case_network = network_from_alt_data.lower()
+    if lower_case_network in vi_names_list:
+        for network in  vi_names_list:
+            if find_needle_in_haystack_contains(network, network_from_device):
+                score += 100
+    else:
+        if find_needle_in_haystack_contains(lower_case_network,network_from_device):
+            score += 100    
     return score
 
 def calculate_app_profile_score(
@@ -45,32 +45,37 @@ def calculate_app_profile_score(
     account_set = set(account_apps)
     
     for app in account_set:
-        if app in account_set and app not in downloaded_set:
+        if not find_needle_in_haystack_contains(app,downloaded_apps):
             score += 1000/len(account_set)
     
     return score
 
+def find_needle_in_haystack_contains(needle, haystack) -> bool:
+    for val in haystack:
+        if needle.lower() in val.lower():
+            return True
+    return False
+
 
 def calculate_final_score(
-    x: float,
-    e: float,
-    identity1,
-    identity2,
-    profile1,
-    profile2,
+    alternate_risk_score: float,
+    device_risk_level: str,
+    name_from_input,
+    name_from_alt_data,
+    network_from_device,
+    network_from_alt_data,
     downloaded_apps,
     account_apps,
 ):
-
     
     # Calculate component scores
-    y = calculate_device_score(e)
-    a = calculate_input_validation_score(identity1, identity2)
-    b = calculate_network_validation_score(profile1, profile2)
-    c = calculate_app_profile_score(downloaded_apps, account_apps)
+    device_score = calculate_device_score(device_risk_level)
+    input_validation = calculate_input_validation_score(name_from_input, name_from_alt_data)
+    network_validation = calculate_network_validation_score(network_from_device, network_from_alt_data)
+    app_profile_score = calculate_app_profile_score(downloaded_apps, account_apps)
     
     # Calculate final score
-    final_score = 0.5 * x + 0.2 * y + 0.05 * a + 0.10 * b + 0.15 * c
+    final_score = 0.5 * alternate_risk_score + 0.2 * device_score + 0.05 * input_validation + 0.10 * network_validation + 0.15 * app_profile_score
     
     # Ensure final score is between 0 and 1
     # final_score = max(0, min(1, final_score))
@@ -79,11 +84,11 @@ def calculate_final_score(
     return {
         'final_score': final_score,
         'component_scores': {
-            'risk_score': x,
-            'device_risk_score': y,
-            'input_validation_score': a,
-            'network_validaiton_score': b,
-            'app_score': c
+            'risk_score': alternate_risk_score,
+            'device_risk_score': device_score,
+            'input_validation_score': input_validation,
+            'network_validaiton_score': network_validation,
+            'app_score': app_profile_score
         }
     }
 

@@ -145,7 +145,7 @@ def get_signals_response(service_response,risk_model_response):
     phone_social_advance_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/phone-social-advance",{})
     phone_network_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/phone-network",{})
 
-    whatsapp_business_presence_final=-1
+    whatsapp_business_presence_final="0"
     whatsapp_business_presence=phone_social_advance_service.get("isWABusiness","Error")
 
     if whatsapp_business_presence=="Account Found":
@@ -257,7 +257,6 @@ def get_risk_service_response(service_response,phone_number,name,email):
     'Content-Type': 'application/json'
     }
 
-    print(f"request_body for riskModel: {payload}")
     try:
         response = requests.post(url, headers=headers, data=payload)
         response.raise_for_status()
