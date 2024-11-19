@@ -1,5 +1,5 @@
 import json
-import secrets
+from src.secrets import secrets
 from structs import structs
 from src.utils import utils
 from src.core import decrypt_device_data,process_android_data
@@ -11,7 +11,6 @@ async def bureau_eye_submit(
     api_version: str,
     auth_credential: str
 ) -> dict:
-    print("Inside Service Func")
     try:
         validate_encrypted_data(device_data)
         decryptedPayload = decrypt_device_data.decrypt_request_body(api_version,device_data,secrets["aes256_key"],secrets["aes256_iv"], secrets["rsa_private_key"], auth_credential)
@@ -57,10 +56,10 @@ def validate_device_data(device_data: any):
     if not device_data["userId_"]:
         raise ValueError("Session ID is required")
     
-def validate_encrypted_data(device_data: any):
-    if not device_data["payload"]:
-        raise ValueError("Session ID is required")
-    if not device_data["eaKey"]:
-        raise ValueError("Session ID is required")
-    if not device_data["eaIV"]:
-        raise ValueError("Session ID is required")
+def validate_encrypted_data(device_data: structs.SubmitRequestBody):
+    if len(device_data.payload)==0:
+        raise ValueError("payload is required")
+    if len(device_data.aes256_iv)==0:
+        raise ValueError("encryptionIV is required")
+    if len(device_data.aes256_key)==0:
+        raise ValueError("encryptionKey is required")

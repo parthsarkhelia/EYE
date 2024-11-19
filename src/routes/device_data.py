@@ -62,7 +62,6 @@ async def process_device_data(
     auth_credential: str = Depends(verify_auth_credential)
 ):
     context = request.state.context
-    logging.Info("Router me aa gaye oye: " + request_body)
     return await device_data.bureau_eye_submit(
         context,
         device_data=request_body,
