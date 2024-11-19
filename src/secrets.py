@@ -35,6 +35,8 @@ def get_secrets():
         "user_collection": os.environ.get("USER_COLLECTION"),
         "social_auth_collection": os.environ.get("SOCIAL_AUTH_COLLECTION"),
         "email_analysis_collection": os.environ.get("EMAIL_ANALYSIS_COLLECTION"),
+        "raw_emails": os.environ.get("RAW_EMAILS_COLLECTION"),
+        "processed_emails": os.environ.get("PROCESSED_EMAILS_COLLECTION"),
         # Social Auths Variable
         "social_auth_redirection_url": os.environ.get("SOCIAL_AUTH_REDIRECTION_URL"),
         "google_client_id": os.environ.get("GOOGLE_CLIENT_ID"),
@@ -43,9 +45,8 @@ def get_secrets():
         "google_redirect_uri": os.environ.get("GOOGLE_REDIRECT_URI"),
         "google_token_url": os.environ.get("GOOGLE_TOKEN_URL"),
         "google_user_info_url": os.environ.get("GOOGLE_USER_INFO_URL"),
-        
         # Device Auth Keys
-        "authorization_key": os.environ.get("AUTHORIZATION_KEY")
+        "authorization_key": os.environ.get("AUTHORIZATION_KEY"),
     }
     return secrets_data
 

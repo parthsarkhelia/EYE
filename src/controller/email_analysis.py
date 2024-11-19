@@ -1,22 +1,113 @@
 import logging
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from enum import Enum
+from typing import Dict, Tuple
 
 from bson import ObjectId
 
 from src.core import mongo
-from src.lib.email_classifier import AnalysisState, EmailAnalyzer
-from src.models.email_analysis import EmailAnalysisRequest
+from src.lib.email_classifier import EmailAnalyzer
+from src.models.email_analysis import EmailAnalysisRequest, StoredEmailAnalysisRequest
 from src.utils import constant
 
 
-async def create_analysis_session(
+class AnalysisState(Enum):
+    INITIALIZED = "initialized"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+async def create_analysis_from_stored_emails(
+    context: Dict, request: StoredEmailAnalysisRequest
+) -> Tuple[int, Dict]:
+    try:
+        analysis_id = str(ObjectId())
+        stored_emails = mongo.processed_emails.find(
+            {"unique_id": request.unique_id}
+        ).to_list(None)
+
+        if not stored_emails:
+            return 404, {"message": "No emails found for the provided unique_id"}
+
+        analysis_record = {
+            "analysis_id": analysis_id,
+            "user_id": request.user_id,
+            "unique_id": request.unique_id,
+            "status": AnalysisState.INITIALIZED.value,
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+            "email_count": len(stored_emails),
+            "processed_count": 0,
+            "settings": request.settings.dict(),
+            "error": None,
+        }
+
+        mongo.email_analysis_collection.insert_one(analysis_record)
+
+        # Update status to processing
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.PROCESSING.value,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+
+        service = EmailAnalyzer()
+        analysis_results = await service.analyze_emails(stored_emails)
+
+        logging.info(
+            {
+                **context,
+                "action": "create_analysis_session",
+                "results": analysis_results,
+            }
+        )
+
+        # Store results and update status
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.COMPLETED.value,
+                    "updated_at": datetime.now(),
+                    "results": analysis_results,
+                    "processed_count": len(stored_emails),
+                }
+            },
+        )
+
+        return 200, {
+            "message": constant.ANALYSIS_COMPLETED,
+            "analysis_id": analysis_id,
+            "status": AnalysisState.COMPLETED.value,
+        }
+
+    except Exception as e:
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.FAILED.value,
+                    "error": str(e),
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+        logging.exception(
+            {**context, "action": "create_analysis_session_failed", "error": str(e)}
+        )
+        return 500, {"message": constant.PROCESSING_ERROR}
+
+
+async def create_analysis_from_request(
     context: Dict, request: EmailAnalysisRequest
 ) -> Tuple[int, Dict]:
     try:
         analysis_id = str(ObjectId())
-
-        # Create initial record
         analysis_record = {
             "analysis_id": analysis_id,
             "user_id": request.user_id,
@@ -35,110 +126,191 @@ async def create_analysis_session(
             "error": None,
         }
 
-        await mongo.email_analysis_records.insert_one(analysis_record)
+        mongo.email_analysis_collection.insert_one(analysis_record)
 
-        # Initialize service
+        # Update status to processing
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.PROCESSING.value,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+
         service = EmailAnalyzer()
-        result = await service.start_analysis(analysis_id, request.emails)
+        analysis_results = await service.analyze_emails(request.emails)
+
+        # Store results and update status
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.COMPLETED.value,
+                    "updated_at": datetime.now(),
+                    "results": analysis_results,
+                    "processed_count": len(request.emails),
+                }
+            },
+        )
 
         return 200, {
-            "message": constant.ANALYSIS_STARTED,
+            "message": constant.ANALYSIS_COMPLETED,
             "analysis_id": analysis_id,
-            "status": result["status"],
+            "status": AnalysisState.COMPLETED.value,
         }
 
     except Exception as e:
-        logging.error(
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.FAILED.value,
+                    "error": str(e),
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+        logging.exception(
             {**context, "action": "create_analysis_session_failed", "error": str(e)}
         )
         return 500, {"message": constant.PROCESSING_ERROR}
 
 
 async def resume_analysis(
-    context: Dict, analysis_id: str, access_token: Optional[str] = None
+    context: Dict, analysis_id: str, access_token: str = None
 ) -> Tuple[int, Dict]:
     try:
+        analysis = mongo.email_analysis_collection.find_one(
+            {"analysis_id": analysis_id}
+        )
+        if not analysis:
+            return 404, {"message": "Analysis not found"}
+
+        if analysis["status"] not in [
+            AnalysisState.FAILED.value,
+            AnalysisState.INITIALIZED.value,
+        ]:
+            return 400, {"message": "Analysis cannot be resumed in current state"}
+
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.PROCESSING.value,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+
+        # Re-run analysis
+        emails = mongo.processed_emails.find(
+            {"unique_id": analysis["unique_id"]}
+        ).to_list(None)
         service = EmailAnalyzer()
-        record = await service.get_analysis_status(analysis_id)
+        result = await service.analyze_emails(emails)
 
-        if not record:
-            return 404, {"message": constant.RECORD_NOT_FOUND}
+        mongo.email_analysis_collection.update_one(
+            {"analysis_id": analysis_id},
+            {
+                "$set": {
+                    "status": AnalysisState.COMPLETED.value,
+                    "results": result,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
 
-        if record["status"] == AnalysisState.TOKEN_EXPIRED.value and not access_token:
-            return 400, {"message": constant.TOKEN_REQUIRED}
-
-        result = await service.resume_analysis(analysis_id, access_token)
-
-        return 200, {"message": constant.ANALYSIS_RESUMED, "status": result["status"]}
+        return 200, {
+            "message": "Analysis resumed successfully",
+            "status": AnalysisState.COMPLETED.value,
+        }
 
     except Exception as e:
-        logging.error({**context, "action": "resume_analysis_failed", "error": str(e)})
+        logging.exception(
+            {**context, "action": "resume_analysis_failed", "error": str(e)}
+        )
         return 500, {"message": constant.PROCESSING_ERROR}
 
 
 async def get_analysis_status(context: Dict, analysis_id: str) -> Tuple[int, Dict]:
     try:
-        service = EmailAnalyzer()
-        status = await service.get_analysis_status(analysis_id)
+        analysis = mongo.email_analysis_collection.find_one(
+            {"analysis_id": analysis_id},
+            {"status": 1, "email_count": 1, "processed_count": 1, "error": 1},
+        )
 
-        if not status:
-            return 404, {"message": constant.RECORD_NOT_FOUND}
+        if not analysis:
+            return 404, {"message": "Analysis not found"}
 
-        return 200, {"message": constant.STATUS_FETCH_SUCCESS, "status": status}
+        return 200, {
+            "status": analysis["status"],
+            "progress": {
+                "total": analysis["email_count"],
+                "processed": analysis["processed_count"],
+                "percentage": round(
+                    (analysis["processed_count"] / analysis["email_count"]) * 100, 2
+                ),
+            },
+            "error": analysis.get("error"),
+        }
 
     except Exception as e:
-        logging.error({**context, "action": "get_status_failed", "error": str(e)})
+        logging.exception(
+            {**context, "action": "get_analysis_status_failed", "error": str(e)}
+        )
         return 500, {"message": constant.PROCESSING_ERROR}
 
 
 async def get_analysis_results(context: Dict, analysis_id: str) -> Tuple[int, Dict]:
     try:
-        service = EmailAnalyzer()
-        status = await service.get_analysis_status(analysis_id)
+        analysis = mongo.email_analysis_collection.find_one(
+            {"analysis_id": analysis_id}
+        )
 
-        if not status:
-            return 404, {"message": constant.RECORD_NOT_FOUND}
+        if not analysis:
+            return 404, {"message": "Analysis not found"}
 
-        if status["status"] != AnalysisState.ANALYSIS_COMPLETED.value:
-            return 400, {"message": constant.ANALYSIS_NOT_COMPLETE}
+        if analysis["status"] != AnalysisState.COMPLETED.value:
+            return 400, {"message": "Analysis results not ready"}
 
-        results = await service.get_analysis_results(analysis_id)
-
-        return 200, {"message": constant.RESULTS_FETCH_SUCCESS, "results": results}
+        return 200, {"results": analysis.get("results", {})}
 
     except Exception as e:
-        logging.error({**context, "action": "get_results_failed", "error": str(e)})
+        logging.exception(
+            {**context, "action": "get_analysis_results_failed", "error": str(e)}
+        )
         return 500, {"message": constant.PROCESSING_ERROR}
 
 
 async def get_user_analyses(
-    context: Dict, user_id: str, page: int, limit: int
+    context: Dict, user_id: str, page: int = 1, limit: int = 10
 ) -> Tuple[int, Dict]:
     try:
         skip = (page - 1) * limit
-
         analyses = (
-            await mongo.email_analysis_records.find({"user_id": user_id})
+            mongo.email_analysis_collection.find({"user_id": user_id}, {"_id": 0})
             .sort("created_at", -1)
             .skip(skip)
             .limit(limit)
-            .to_list(length=limit)
+            .to_list(None)
         )
 
-        total = await mongo.email_analysis_records.count_documents({"user_id": user_id})
+        total = mongo.email_analysis_collection.count_documents({"user_id": user_id})
 
         return 200, {
-            "message": constant.ANALYSES_FETCH_SUCCESS,
-            "data": {
-                "analyses": analyses,
-                "total": total,
+            "analyses": analyses,
+            "pagination": {
                 "page": page,
-                "total_pages": (total + limit - 1) // limit,
+                "limit": limit,
+                "total": total,
+                "pages": -(-total // limit),  # Ceiling division
             },
         }
 
     except Exception as e:
-        logging.error(
+        logging.exception(
             {**context, "action": "get_user_analyses_failed", "error": str(e)}
         )
         return 500, {"message": constant.PROCESSING_ERROR}
@@ -146,22 +318,17 @@ async def get_user_analyses(
 
 async def delete_analysis(context: Dict, analysis_id: str) -> Tuple[int, Dict]:
     try:
-        # Delete analysis record
-        result = await mongo.email_analysis_records.delete_one(
+        result = mongo.email_analysis_collection.delete_one(
             {"analysis_id": analysis_id}
         )
 
         if result.deleted_count == 0:
-            return 404, {"message": constant.RECORD_NOT_FOUND}
+            return 404, {"message": "Analysis not found"}
 
-        # Delete related data
-        await mongo.raw_emails_collection.delete_many({"analysis_id": analysis_id})
-        await mongo.analysis_results_collection.delete_many(
-            {"analysis_id": analysis_id}
-        )
-
-        return 200, {"message": constant.ANALYSIS_DELETED}
+        return 200, {"message": "Analysis deleted successfully"}
 
     except Exception as e:
-        logging.error({**context, "action": "delete_analysis_failed", "error": str(e)})
+        logging.exception(
+            {**context, "action": "delete_analysis_failed", "error": str(e)}
+        )
         return 500, {"message": constant.PROCESSING_ERROR}
