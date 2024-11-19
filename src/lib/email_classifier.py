@@ -1,12 +1,9 @@
 import logging
-import os
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-import numpy as np
-import pandas as pd
 import spacy
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
@@ -16,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 class EmailAnalyzer:
     def __init__(self, model_path: Optional[str] = None):
-        """Initialize EmailAnalyzer with required models and configurations"""
         logger.info({"action": "initializing_email_analyzer", "model_path": model_path})
 
         try:
@@ -46,7 +42,6 @@ class EmailAnalyzer:
             raise
 
     def _initialize_configurations(self):
-        """Initialize all configuration dictionaries"""
         logger.info({"action": "initializing_configurations"})
 
         try:
@@ -193,7 +188,6 @@ class EmailAnalyzer:
             raise
 
     def process_emails(self, emails: List[Dict]) -> Dict:
-        """Process emails and generate comprehensive analysis"""
         logger.info({"action": "processing_emails", "email_count": len(emails)})
 
         try:
@@ -233,7 +227,6 @@ class EmailAnalyzer:
             raise
 
     def analyze_credit_payments(self, emails: List[Dict]) -> Dict:
-        """Analyze credit card related emails and extract payment patterns"""
         logger.info({"action": "analyzing_credit_payments", "email_count": len(emails)})
 
         try:
@@ -284,7 +277,6 @@ class EmailAnalyzer:
             raise
 
     def analyze_spending(self, emails: List[Dict]) -> Dict:
-        """Analyze spending patterns across different categories"""
         logger.info({"action": "analyzing_spending", "email_count": len(emails)})
 
         try:
@@ -330,7 +322,6 @@ class EmailAnalyzer:
             raise
 
     def analyze_identity(self, emails: List[Dict]) -> Dict:
-        """Analyze identity verification related emails"""
         logger.info({"action": "analyzing_identity", "email_count": len(emails)})
 
         try:
@@ -375,7 +366,6 @@ class EmailAnalyzer:
             raise
 
     def _is_credit_card_email(self, email: Dict) -> bool:
-        """Check if email is credit card related"""
         try:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
             patterns = self.email_categories["credit_cards"]["patterns"]
@@ -385,7 +375,6 @@ class EmailAnalyzer:
             return False
 
     def _extract_credit_card_info(self, email: Dict) -> Dict:
-        """Extract credit card information from email"""
         try:
             content = email.get("content", "")
             extractors = self.email_categories["credit_cards"]["extractors"]
@@ -412,7 +401,6 @@ class EmailAnalyzer:
             return {}
 
     def _extract_pattern(self, text: str, pattern: str) -> Optional[str]:
-        """Extract pattern from text"""
         try:
             match = re.search(pattern, text, re.IGNORECASE)
             return match.group(1) if match else None
@@ -420,7 +408,6 @@ class EmailAnalyzer:
             return None
 
     def _extract_amount(self, text: str, pattern: str) -> Optional[float]:
-        """Extract and convert amount to float"""
         try:
             amount_str = self._extract_pattern(text, pattern)
             if amount_str:
@@ -430,7 +417,6 @@ class EmailAnalyzer:
             return None
 
     def _extract_date(self, text: str, pattern: str) -> Optional[str]:
-        """Extract and validate date"""
         try:
             date_str = self._extract_pattern(text, pattern)
             if date_str:
@@ -440,7 +426,6 @@ class EmailAnalyzer:
             return None
 
     def _get_category_distribution(self, emails: List[Dict]) -> Dict:
-        """Get distribution of emails across categories"""
         try:
             distribution = defaultdict(int)
             for email in emails:
@@ -462,7 +447,6 @@ class EmailAnalyzer:
             return {}
 
     def _categorize_email(self, email: Dict) -> Optional[str]:
-        """Categorize email using zero-shot classification"""
         try:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
             result = self.classifier(
@@ -488,7 +472,6 @@ class EmailAnalyzer:
             return None
 
     def analyze_portfolio(self, emails: List[Dict]) -> Dict:
-        """Analyze portfolio and investment related emails"""
         logger.info({"action": "analyzing_portfolio", "email_count": len(emails)})
 
         try:
@@ -529,7 +512,6 @@ class EmailAnalyzer:
             raise
 
     def analyze_travel(self, emails: List[Dict]) -> Dict:
-        """Analyze travel related emails and generate location data"""
         logger.info({"action": "analyzing_travel", "email_count": len(emails)})
 
         try:
@@ -570,7 +552,6 @@ class EmailAnalyzer:
             raise
 
     def _update_credit_analysis(self, analysis: Dict, info: Dict):
-        """Update credit card analysis with new information"""
         try:
             if "total_due" in info:
                 analysis["total_due"] = info["total_due"]
@@ -592,7 +573,6 @@ class EmailAnalyzer:
             logger.error({"action": "credit_analysis_update_failed", "error": str(e)})
 
     def _update_spending_analysis(self, analysis: Dict, transaction: Dict):
-        """Update spending analysis with new transaction"""
         try:
             if "category" in transaction and "amount" in transaction:
                 analysis["categories"][transaction["category"]] += transaction["amount"]
@@ -622,7 +602,6 @@ class EmailAnalyzer:
             logger.error({"action": "spending_analysis_update_failed", "error": str(e)})
 
     def _update_identity_analysis(self, analysis: Dict, verification: Dict):
-        """Update identity analysis with new verification information"""
         try:
             if "document_type" in verification:
                 analysis["documents"][verification["document_type"]].append(
@@ -651,7 +630,6 @@ class EmailAnalyzer:
             logger.error({"action": "identity_analysis_update_failed", "error": str(e)})
 
     def _update_portfolio_analysis(self, analysis: Dict, trade: Dict):
-        """Update portfolio analysis with new trade information"""
         try:
             if "symbol" in trade and "transaction_type" in trade:
                 analysis["transactions"][trade["symbol"]].append(trade)
@@ -681,7 +659,6 @@ class EmailAnalyzer:
             )
 
     def _update_travel_analysis(self, analysis: Dict, travel: Dict):
-        """Update travel analysis with new travel information"""
         try:
             if "location" in travel:
                 analysis["locations"][travel["location"]] += 1
@@ -706,7 +683,6 @@ class EmailAnalyzer:
             logger.error({"action": "travel_analysis_update_failed", "error": str(e)})
 
     def get_summary_report(self, analysis_results: Dict) -> Dict:
-        """Generate summary report from all analyses"""
         logger.info({"action": "generating_summary_report"})
 
         try:
@@ -776,7 +752,6 @@ class EmailAnalyzer:
 
     @staticmethod
     def _get_top_items(data: Dict, limit: int) -> Dict:
-        """Get top N items from a dictionary by value"""
         return dict(sorted(data.items(), key=lambda x: x[1], reverse=True)[:limit])
 
 

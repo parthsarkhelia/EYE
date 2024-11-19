@@ -42,7 +42,7 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
             )
 
         # Removing unwanted fields
-        for field in ["start_timestamp"]:
+        for field in ["start_timestamp", "taskName"]:
             if field in log_record:
                 del log_record[field]
 
