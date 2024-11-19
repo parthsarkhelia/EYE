@@ -667,9 +667,6 @@ class EmailAnalyzer:
             },
         }
 
-        # Process each email for spending information
-        spending_emails = []
-
         for email in emails:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
             date = email.get("date")
@@ -691,8 +688,6 @@ class EmailAnalyzer:
             if not transaction:
                 continue
 
-            spending_emails.append(email)
-
             # Update category-specific metrics
             self._update_category_metrics(transaction, spending_info)
 
@@ -701,15 +696,6 @@ class EmailAnalyzer:
 
         # Post-processing calculations
         self._calculate_spending_metrics(spending_info)
-
-        logging.info(
-            {
-                "message": "Spending analysis completed",
-                "total_emails": len(emails),
-                "transaction_emails": len(spending_emails),
-                "spending_emails": spending_emails,
-            }
-        )
         return spending_info
 
     def _is_transaction_email(self, content: str) -> bool:
