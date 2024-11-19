@@ -2,36 +2,70 @@ import logging
 import re
 from collections import defaultdict
 from datetime import datetime
-from enum import Enum
 from typing import Dict, List, Optional
 
 import pandas as pd
 
 
-class AnalysisState(Enum):
-    INITIALIZED = "initialized"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
 class EmailAnalyzer:
-    def __init__(self, batch_size: int = 1000):
-        self.batch_size = batch_size
-        self._initialize_patterns()
-        self._initialize_extractors()
+    def __init__(self):
+        self._init_patterns()
+        self._init_categories()
 
-    def _initialize_patterns(self):
+    def _init_patterns(self):
+        # Exclude words that should not be considered as merchant names
+        exclude_words = r"(?!(?:transaction|amount|bank|credit|debit|card|limit|inr|rs|rupees|available|\d+))"
         self.patterns = {
-            "credit_cards": {
-                "card_number": r"(?:x{4}\s*){3}\d{4}|(?:\d{4}\s*){3}\d{4}",
+            "credit_card": {
+                # Card identification patterns
+                "card_numbers": [
+                    r"(?:card|cc)\s+(?:no\.?|number|ending)\s+(?:in\s+)?(?:[Xx*]+|XX|xx)(\d{4})",
+                    r"(?:card|cc)(?:\s+account)?\s+(?:\d{4}\s+)?(?:X{4}\s+){2,3}(\d{4})",
+                    r"(?:credit\s+card|card)\s+(?:account\s+)?(\d{4})(?:\s+X{4}){2,3}",
+                    r"(?:card\s+account\s+)?(\d{4})\s+X{4}\s+X{4}\s+(\d{4})",
+                    r"(?:card|account).{0,30}?(\d{4})(?:\s|$)",
+                ],
+                "card_type": r"(?:credit|debit)\s+card\s+(?:no\.?|number)\s+(?:[Xx*]+|XX|xx)(\d{4})",
+                # Statement patterns
+                "statement_period": r"(?:STATEMENT\s+FOR\s+THE\s+PERIOD|FOR\s+THE\s+PERIOD|STATEMENT\s+PERIOD)\s*(?:FROM\s+)?([A-Za-z]+\s+\d{1,2},?\s*\d{4})\s*(?:TO|TILL|[-])\s*([A-Za-z]+\s+\d{1,2},?\s*\d{4})",
+                "card_statement": r"(?:CREDIT\s+CARD\s+(?:E)?STATEMENT|(?:E)?STATEMENT\s+FOR)\s+(?:FOR\s+)?([A-Za-z]+\s+\d{4})",
+                "due_date": r"(?:PAYMENT\s+)?DUE\s+(?:DATE|BY)[:\s]*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+,?\s*\d{4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})",
+                "total_due": r"(?:TOTAL\s+(?:AMOUNT\s+)?DUE|PAYMENT\s+DUE|CURRENT\s+AMOUNT\s+DUE)[:\s]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)",
+                "min_due": r"(?:MINIMUM|MIN\.?)\s+(?:AMOUNT\s+)?(?:DUE|PAYMENT)[:\s]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)",
+                "credit_limit": r"(?:TOTAL\s+CREDIT\s+LIMIT|CREDIT\s+LIMIT|CARD\s+LIMIT)[:\s]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)",
+                "available_limit": r"(?:AVAILABLE\s+CREDIT\s+LIMIT|AVAILABLE\s+LIMIT)[:\s]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)",
+                # Transaction patterns
+                "transaction_amount": r"(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
+                "transaction_date": r"(?:date|on)\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})",
+                "transaction_time": r"(?:at|@)\s*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)",
+                # Payment patterns
+                "payment_received": r"(?:payment\s+received|thank\s+you\s+for\s+your\s+payment|payment\s+confirmed).*?(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
+                "payment_mode": r"(?:payment\s+mode|paid\s+via|paid\s+using)[:\s]*([A-Za-z\s]+)",
+            },
+            "transaction": {
                 "amount": r"(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "due_date": r"(?:due|payment)\s*(?:date)?[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{4})",
-                "card_type": r"(?:visa|mastercard|rupay|amex)",
-                "credit_limit": r"(?:credit\s+limit|limit)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "min_due": r"(?:minimum|min)\s*(?:amount|payment)?[:\s]*(?:due)?[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
-                "banks": r"(?:hdfc|icici|sbi|axis|kotak|citi|amex|yes|rbl|idfc)",
-                "statement_period": r"(?:statement|billing)\s*period[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{4})\s*(?:to|-)\s*(\d{1,2}[-/]\d{1,2}[-/]\d{4})",
+                "upi_id": r"(?:UPI|VPA|upi\s+id)[:\s]*([a-zA-Z0-9\.\-\_]+@[a-zA-Z]+)",
+                "merchant": rf"at\s+{exclude_words}([A-Z][A-Za-z0-9\s&\-\.]+?)(?:\s+on|\s*\.\s*|\s*$)",
+                "merchant_alt": r"(?:at|in)\s+([A-Z][A-Za-z0-9\s&\-\.]+?(?:MART|SHOP|STORE|CINEMA|RESTAURANT|CAFE|HOTEL|MALL|ENTERPRISES|SOLUTIONS|LABS|TECHNOLOGIES|PVT|LTD))(?:\s+on|\s*\.\s*|\s*$)",
+                "reference": r"(?:ref\.?(?:erence)?|txn|transaction)\s*(?:no\.?|id|number)[:\s]*([A-Z0-9]+)",
+                "status": r"(?:status|transaction\s+status)[:\s]*([A-Za-z]+)",
+            },
+            "identity": {
+                "aadhaar": r"(?:aadhaar|aadhar|uid|आधार)[:\s]*(?:\d{4}\s*){3}\d{4}",
+                "pan": r"(?:pan|permanent\s+account\s+number)[:\s]*([A-Z]{5}\d{4}[A-Z])",
+                "gstin": r"(?:gstin|gst\s+no)[:\s]*\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]{3}",
+                "voter_id": r"(?:voter\s+id|epic\s+no)[:\s]*[A-Z]{3}\d{7}",
+                "driving_license": r"(?:dl\s+no|driving\s+licen[cs]e)[:\s]*(?:[A-Z]{2}20\d{14})",
+                "passport": r"(?:passport\s+no)[:\s]*[A-Z]\d{7}",
+                "otp": r"(?:OTP|one\s+time\s+password|verification\s+code|security\s+code)[:\s]*(\d{4,8})",
+                "mobile": r"(?:mobile|phone|contact)[:\s]*(?:\+91[\-\s]*)?(\d{10})",
+                "email": r"(?:email|e-mail)[:\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Z|a-z]{2,})",
+            },
+            "bank": {
+                "account": r"(?:a/c|account)\s*(?:no\.?|number)[:\s]*[Xx*]*(\d{4})",
+                "ifsc": r"(?:ifsc|ifsc\s+code)[:\s]*([A-Z]{4}0[A-Z0-9]{6})",
+                "branch": r"(?:branch)[:\s]*([A-Za-z\s]+)",
+                "balance": r"(?:balance|available\s+balance)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
             },
             "spending": {
                 "transaction": r"(?:transaction|payment|purchase)[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
@@ -41,16 +75,6 @@ class EmailAnalyzer:
                 "reward_points": r"(?:reward|points)[:\s]*(\d+)",
                 "cashback": r"cashback[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)",
                 "discount": r"discount[:\s]*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{2})?)|(\d+)%\s*(?:off|discount)",
-            },
-            "identity": {
-                "aadhaar": r"(?:aadhaar|uid|आधार)[:\s]*(\d{4}\s*\d{4}\s*\d{4})",
-                "pan": r"[A-Z]{5}\d{4}[A-Z]",
-                "passport": r"[A-Z]{1}\d{7}",
-                "driving_license": r"(?:dl|driving)[:\s]*([A-Z]{2}\d{13})",
-                "voter_id": r"[A-Z]{3}\d{7}",
-                "gstin": r"\d{2}[A-Z]{5}\d{4}[A-Z]{1}\d[Z]{1}[A-Z\d]{1}",
-                "verification_status": r"(?:verified|pending|failed|successful|complete)",
-                "otp": r"otp[:\s]*(\d{4,8})",
             },
             "portfolio": {
                 "stock_symbol": r"(?:nse|bse)[:\s]*([A-Z]+)",
@@ -75,592 +99,929 @@ class EmailAnalyzer:
             },
         }
 
-    def _initialize_extractors(self):
-        self.category_extractors = {
-            "credit_cards": self._extract_credit_card_info,
-            "spending": self._extract_spending_info,
-            "identity": self._extract_identity_info,
-            "portfolio": self._extract_portfolio_info,
-            "travel": self._extract_travel_info,
+    def _init_categories(self):
+        self.categories = {
+            "credit_cards": [
+                "hdfc",
+                "icici",
+                "sbi",
+                "axis",
+                "kotak",
+                "yes",
+                "idfc",
+                "indusind",
+                "rbl",
+                "federal",
+                "dcb",
+                "bandhan",
+                "tata",
+                "au",
+                "pnb",
+                "boi",
+                "canara",
+                "union",
+                "bob",
+                "indian",
+                "central",
+                "ubi",
+                "citi",
+                "amex",
+                "standard_chartered",
+                "hsbc",
+                "dbs",
+                "slice",
+                "uni",
+                "onecard",
+                "niyo",
+                "fi",
+            ],
+            "food-dining": [
+                "zomato",
+                "swiggy",
+                "uber eats",
+                "restaurant",
+                "food",
+                "cafe",
+                "dhaba",
+                "kitchen",
+                "eatery",
+                "biryani",
+                "pizza",
+                "bakery",
+                "sweet",
+                "catering",
+                "ola store",
+            ],
+            "travel-transport": [
+                "makemytrip",
+                "goibibo",
+                "irctc",
+                "indigo",
+                "spicejet",
+                "vistara",
+                "airasia",
+                "air india",
+                "uber",
+                "ola",
+                "olacab",
+                "ola cab",
+                "rapido",
+                "redbus",
+                "railway",
+                "airways",
+                "flight",
+                "bus",
+                "cab",
+                "auto",
+                "metro",
+            ],
+            "shopping_retail": [
+                "amazon",
+                "flipkart",
+                "myntra",
+                "ajio",
+                "bigbasket",
+                "grofers",
+                "dmart",
+                "reliance",
+                "trends",
+                "lifestyle",
+                "shoppers stop",
+                "tata cliq",
+                "nykaa",
+                "meesho",
+                "mart",
+                "supermarket",
+                "store",
+                "retail",
+                "shop",
+                "mall",
+            ],
+            "utilities_bills": [
+                "electricity",
+                "water",
+                "gas",
+                "broadband",
+                "internet",
+                "mobile",
+                "phone",
+                "dth",
+                "recharge",
+                "bill",
+                "fastag",
+                "maintenance",
+                "association",
+                "society",
+            ],
+            "entertainment": [
+                "netflix",
+                "prime",
+                "hotstar",
+                "sony",
+                "zee",
+                "bookmyshow",
+                "pvr",
+                "inox",
+                "cinemas",
+                "movies",
+                "theater",
+                "games",
+                "gaming",
+            ],
+            "health_medical": [
+                "hospital",
+                "clinic",
+                "pharmacy",
+                "medical",
+                "doctor",
+                "healthcare",
+                "diagnostic",
+                "lab",
+                "apollo",
+                "fortis",
+                "manipal",
+                "wellness",
+            ],
+            "education": [
+                "school",
+                "college",
+                "university",
+                "institute",
+                "academy",
+                "classes",
+                "course",
+                "training",
+                "education",
+                "learning",
+                "udemy",
+                "coursera",
+            ],
+            "financial": [
+                "insurance",
+                "investment",
+                "mutual fund",
+                "stocks",
+                "trading",
+                "loan",
+                "emi",
+                "bank",
+                "finance",
+                "payment",
+                "zerodha",
+                "groww",
+                "upstox",
+            ],
+        }
+
+        # Additional metadata for transactions
+        self.transaction_types = {
+            "credit": ["credit", "received", "refund", "cashback", "reversal"],
+            "debit": ["debit", "paid", "payment", "spent", "withdraw", "purchase"],
+            "pending": ["pending", "processing", "initiated", "authorization"],
+        }
+
+        self.payment_modes = {
+            "upi": ["upi", "unified payments", "google pay", "phonepe", "paytm"],
+            "netbanking": ["netbanking", "internet banking", "online banking"],
+            "card": ["credit card", "debit card", "card payment", "visa", "mastercard"],
+            "wallet": ["wallet", "paytm wallet", "amazon pay", "mobikwik"],
+            "cash": ["cash", "cash deposit", "atm"],
         }
 
     async def analyze_emails(self, emails: List[Dict]) -> Dict:
         try:
             results = {
-                "credit_analysis": [],
-                "spending_analysis": [],
-                "identity_analysis": [],
-                "portfolio_analysis": [],
-                "travel_analysis": [],
-                "summary": defaultdict(int),
+                "credit_analysis": self.analyze_credit_cards(emails),
+                # "spending_analysis": self.analyze_spending(emails),
+                # "identity_analysis": self.analyze_identity(emails),
+                # "portfolio_analysis": self.analyze_portfolio(emails),
+                # "travel_analysis": self.analyze_travel(emails),
+                "summary": {
+                    "total_emails": len(emails),
+                    "analysis_date": datetime.now().isoformat(),
+                    "insights": [],
+                },
             }
 
-            for email in emails:
-                category = await self._categorize_email(email)
-                if category and category in self.category_extractors:
-                    analysis = await self.category_extractors[category](email)
-                    if analysis:
-                        results[f"{category}_analysis"].append(analysis)
-                        results["summary"][category] += 1
+            # Generate insights
+            insights = self.generate_insights(results)
+            results["summary"]["insights"] = insights
 
-            return await self._finalize_results(results)
+            # # Generate heatmap if travel data exists
+            # if results["travel_analysis"].get("routes"):
+            #     results["travel_analysis"]["heatmap"] = self.generate_heatmap_data(
+            #         results["travel_analysis"]
+            #     )
 
-        except Exception as e:
-            logging.error({"action": "email_analysis_failed", "error": str(e)})
-            raise
-
-    async def _categorize_email(self, email: Dict) -> Optional[str]:
-        try:
-            content = f"{email.get('subject', '')} {email.get('content', '')}"
-            content = content.lower()
-
-            # Check each category's patterns
-            category_scores = {}
-            for category, patterns in self.patterns.items():
-                score = 0
-                for pattern in patterns.values():
-                    matches = re.findall(pattern, content, re.IGNORECASE)
-                    score += len(matches)
-                category_scores[category] = score
-
-            # Get category with highest score
-            if category_scores:
-                max_category = max(category_scores.items(), key=lambda x: x[1])
-                if max_category[1] > 0:
-                    return max_category[0]
-
-            return None
+            return results
 
         except Exception as e:
-            logging.error({"action": "email_categorization_failed", "error": str(e)})
-            return None
+            logging.error(f"Error analyzing emails: {str(e)}", exc_info=True)
+            raise Exception(f"Email analysis failed: {str(e)}")
 
-    async def _extract_credit_card_info(self, email: Dict) -> Dict:
-        try:
-            content = f"{email.get('subject', '')} {email.get('content', '')}"
-            patterns = self.patterns["credit_cards"]
-
-            info = {
-                "timestamp": email.get("date"),
-                "card_number": self._extract_pattern(content, patterns["card_number"]),
-                "amount": self._extract_amount(content, patterns["amount"]),
-                "due_date": self._extract_date(content, patterns["due_date"]),
-                "card_type": self._extract_pattern(content, patterns["card_type"]),
-                "credit_limit": self._extract_amount(content, patterns["credit_limit"]),
-                "min_due": self._extract_amount(content, patterns["min_due"]),
-                "bank": self._extract_pattern(content, patterns["banks"]),
-                "statement_period": self._extract_statement_period(
-                    content, patterns["statement_period"]
-                ),
+    def analyze_credit_cards(self, emails: List[Dict]) -> Dict:
+        credit_info = defaultdict(
+            lambda: {
+                "card_number": None,
+                "issuer": None,
+                "transactions": [],
+                # "statements": [],
+                # "credit_limit": None,
+                "total_spend": 0,
+                "payment_history": [],
+                # "reward_points": 0,
             }
+        )
 
-            return {k: v for k, v in info.items() if v}
-
-        except Exception as e:
-            logging.error({"action": "credit_card_extraction_failed", "error": str(e)})
-            return {}
-
-    async def _extract_spending_info(self, email: Dict) -> Dict:
-        try:
+        for email in emails:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
-            patterns = self.patterns["spending"]
+            sender = email.get("sender", "").lower()
+            date = email.get("date")
+            date = date.strftime("%Y-%m-%d %H:%M:%S")
 
-            info = {
-                "timestamp": email.get("date"),
-                "transaction_amount": self._extract_amount(
-                    content, patterns["transaction"]
-                ),
-                "merchant": self._extract_pattern(content, patterns["merchant"]),
-                "category": self._extract_pattern(content, patterns["category"]),
-                "payment_method": self._extract_pattern(
-                    content, patterns["payment_method"]
-                ),
-                "reward_points": self._extract_pattern(
-                    content, patterns["reward_points"]
-                ),
-                "cashback": self._extract_amount(content, patterns["cashback"]),
-                "discount": self._extract_pattern(content, patterns["discount"]),
-            }
+            # Skip promotional content
+            if self._is_credit_card_promotional(content):
+                continue
 
-            return {k: v for k, v in info.items() if v}
+            # Identify issuer from sender domain
+            issuer = self._identify_issuer(sender)
+            if not issuer:
+                continue
 
-        except Exception as e:
-            logging.error({"action": "spending_extraction_failed", "error": str(e)})
-            return {}
+            # Extract card details
+            card_number = self._extract_card_number(content)
+            if card_number:
+                card_key = f"{issuer}_{card_number}"
+                credit_info[card_key]["issuer"] = issuer
+                credit_info[card_key]["card_number"] = card_number
+                # Process based on email type
+                if self._is_credit_card_transaction_alert(content):
+                    self._process_transaction(content, date, credit_info[card_key])
+                # elif self._is_credit_card_statement(content):
+                # self._process_statement(content, date, credit_info[card_key])
+                elif self._is_credit_card_payment_confirmation(content):
+                    self._process_payment(content, date, credit_info[card_key])
 
-    async def _extract_identity_info(self, email: Dict) -> Dict:
-        try:
+                # Extract additional card-specific info
+                self._extract_rewards(content, credit_info[card_key])
+
+        # Calculate metrics for each card
+        for card_info in credit_info.values():
+            self._calculate_card_metrics(card_info)
+
+        return dict(credit_info)
+
+    def _identify_issuer(self, content: str) -> Optional[str]:
+        content_lower = content.lower()
+
+        # Check for issuer names in content
+        for issuer in self.categories["credit_cards"]:
+            # Create variations of issuer names (e.g., "hdfc", "hdfc bank", "hdfcbank")
+            issuer_variations = [issuer, f"{issuer} bank", f"{issuer}bank"]
+
+            if any(variation in content_lower for variation in issuer_variations):
+                return issuer
+
+        return None
+
+    def _identify_network(self, content: str) -> Optional[str]:
+        networks = {
+            "visa": [
+                "visa",
+                "visa card",
+                "visa credit",
+                "visa debit",
+                "visa platinum",
+                "visa signature",
+                "visa infinite",
+                "visa business",
+                "visa corporate",
+                "visa electron",
+                "vpay",
+            ],
+            "mastercard": [
+                "mastercard",
+                "master card",
+                "master credit",
+                "master debit",
+                "mastercard world",
+                "mastercard black",
+                "mastercard platinum",
+                "mastercard titanium",
+                "mastercard corporate",
+                "mastercard business",
+                "cirrus",
+                "maestro",
+            ],
+            "rupay": [
+                "rupay",
+                "rupay card",
+                "ru pay",
+                "rupay debit",
+                "rupay credit",
+                "rupay platinum",
+                "rupay select",
+                "rupay business",
+                "rupay global",
+                "rupay international",
+            ],
+            "amex": [
+                "amex",
+                "american express",
+                "amex platinum",
+                "amex gold",
+                "amex centurion",
+                "amex black",
+                "amex business",
+                "amex corporate",
+            ],
+            "diners": [
+                "diners",
+                "diners club",
+                "diners international",
+                "diners premium",
+                "diners privilege",
+                "diners business",
+                "diners corporate",
+                "discover",
+                "diners black",
+            ],
+            "jcb": [
+                "jcb",
+                "japan credit bureau",
+                "jcb gold",
+                "jcb platinum",
+                "jcb business",
+                "jcb corporate",
+            ],
+        }
+
+        content_lower = content.lower()
+        return next(
+            (
+                network
+                for network, keywords in networks.items()
+                if any(keyword in content_lower for keyword in keywords)
+            ),
+            None,
+        )
+
+    def _is_credit_card_transaction_alert(self, content: str) -> bool:
+        keywords = [
+            "transaction alert",
+            "spent",
+            "debited",
+            "charged",
+            "purchase",
+            "debit",
+            "Thank you for using your credit card",
+            "has been used",
+            "for using",
+        ]
+        return any(keyword in content.lower() for keyword in keywords)
+
+    def _is_credit_card_statement(self, content: str) -> bool:
+        return "statement" in content.lower()
+
+    def _is_credit_card_payment_confirmation(self, content: str) -> bool:
+        keywords = [
+            "payment received",
+            "payment confirmed",
+            "thank you for your payment",
+            "payment has been posted",
+            "payment processed",
+            "payment successful",
+            "payment credited",
+            "amount credited",
+            "credit card payment received",
+            "we've received your payment",
+            "payment acknowledged",
+            "payment successfully posted",
+            "bill payment confirmed",
+            "card payment successful",
+            "EMI payment received",
+            "auto-payment successful",
+            "standing instruction executed",
+            "auto debit successful",
+            "credit posted to your account",
+            "your account has been credited",
+        ]
+        return any(keyword in content.lower() for keyword in keywords)
+
+    def _is_credit_card_promotional(self, content: str) -> bool:
+        promo_keywords = [
+            "offer",
+            "reward",
+            "exclusive",
+            "discount",
+            "save",
+            "deal",
+            "cashback",
+            "promotion",
+            "special",
+            "limited time",
+            "apply now",
+            "pre-approved",
+            "upgrade your card",
+        ]
+        return any(keyword in content.lower() for keyword in promo_keywords)
+
+    def _extract_rewards(self, content: str, card_info: Dict):
+        points_match = re.search(r"(?:reward|points)[:\s]*(\d+)", content)
+        if points_match:
+            card_info["reward_points"] += int(points_match.group(1))
+
+    def _process_transaction(self, content: str, date: str, card_info: Dict):
+        amount = self._extract_amount(
+            content, self.patterns["credit_card"]["transaction_amount"]
+        )
+        merchant = self._extract_pattern(
+            content, self.patterns["transaction"]["merchant_alt"]
+        )
+        if not merchant:
+            merchant = self._extract_pattern(
+                content, self.patterns["transaction"]["merchant"]
+            )
+        if not merchant:
+            merchant = "unknown"
+
+        if amount:
+            card_info["transactions"].append(
+                {
+                    "date": date,
+                    "amount": amount,
+                    "merchant": merchant,
+                    "category": self._categorize_merchant(merchant),
+                    "type": "debit",
+                }
+            )
+            card_info["total_spend"] += amount
+
+    def _process_statement(
+        self, content: str, subject: str, date: str, card_info: Dict
+    ):
+        # First check subject for statement period
+        period_match = re.search(
+            self.patterns["credit_card"]["statement_period"], subject
+        )
+        if not period_match:
+            period_match = re.search(
+                self.patterns["credit_card"]["statement_period"], content
+            )
+
+        statement_info = {
+            "date": date,
+            "start_date": period_match.group(1) if period_match else None,
+            "end_date": period_match.group(2) if period_match else None,
+            "total_due": self._extract_amount(
+                content, self.patterns["credit_card"]["total_due"]
+            ),
+            "min_due": self._extract_amount(
+                content, self.patterns["credit_card"]["min_due"]
+            ),
+            "due_date": self._extract_date(
+                content, self.patterns["credit_card"]["due_date"]
+            ),
+        }
+
+        # Extract credit limits
+        credit_limit = self._extract_amount(
+            content, self.patterns["credit_card"]["credit_limit"]
+        )
+        available_limit = self._extract_amount(
+            content, self.patterns["credit_card"]["available_limit"]
+        )
+
+        if credit_limit:
+            card_info["credit_limit"] = credit_limit
+        if available_limit:
+            card_info["available_limit"] = available_limit
+
+        if any(statement_info.values()):
+            if "statements" not in card_info:
+                card_info["statements"] = []
+            card_info["statements"].append(statement_info)
+
+    def _process_payment(self, content: str, date: str, card_info: Dict):
+        amount = self._extract_amount(
+            content, self.patterns["credit_card"]["transaction_amount"]
+        )
+        if amount:
+            card_info["payment_history"].append(
+                {
+                    "date": date,
+                    "amount": amount,
+                    "type": "credit",
+                    "mode": self._extract_payment_mode(content),
+                }
+            )
+
+    def _extract_payment_mode(self, content: str) -> str:
+        mode_match = re.search(self.patterns["credit_card"]["payment_mode"], content)
+        return mode_match.group(1).strip().lower() if mode_match else "unknown"
+
+    def _calculate_card_metrics(self, card_info: Dict):
+        if not card_info.get("statements"):
+            return
+
+        on_time_payments = sum(
+            1
+            for s in card_info.get("statements")
+            for p in card_info.get("payment_history")
+            if pd.to_datetime(p["date"]) <= pd.to_datetime(s.get("due_date"))
+        )
+
+        card_info["metrics"] = {
+            "payment_behavior": {
+                "total_statements": len(card_info.get("statements")),
+                "on_time_payments": on_time_payments,
+                "payment_ratio": on_time_payments / len(card_info.get("statements")),
+            },
+            "spending_pattern": {
+                "average_monthly": card_info.get("total_spend")
+                / max(len(card_info.get("statements")), 1),
+                "credit_utilization": (
+                    card_info.get("total_spend") / card_info.get("credit_limit") * 100
+                )
+                if card_info.get("credit_limit")
+                else None,
+            },
+            "rewards_summary": {
+                "total_points": card_info["reward_points"],
+            },
+        }
+
+    def analyze_spending(self, emails: List[Dict]) -> Dict:
+        spending = {
+            "by_category": defaultdict(float),
+            "by_merchant": defaultdict(float),
+            "monthly": defaultdict(float),
+            "transactions": [],
+        }
+
+        for email in emails:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
-            patterns = self.patterns["identity"]
+            date = email.get("date")
 
-            info = {
-                "timestamp": email.get("date"),
-                "aadhaar": self._extract_pattern(content, patterns["aadhaar"]),
-                "pan": self._extract_pattern(content, patterns["pan"]),
-                "passport": self._extract_pattern(content, patterns["passport"]),
-                "driving_license": self._extract_pattern(
-                    content, patterns["driving_license"]
-                ),
-                "voter_id": self._extract_pattern(content, patterns["voter_id"]),
-                "gstin": self._extract_pattern(content, patterns["gstin"]),
-                "verification_status": self._extract_pattern(
-                    content, patterns["verification_status"]
-                ),
-                "otp": self._extract_pattern(content, patterns["otp"]),
-            }
+            # Extract transactions
+            txn_matches = re.finditer(self.patterns["transaction"]["amount"], content)
+            for match in txn_matches:
+                amount = float(match.group(1).replace(",", ""))
+                merchant = match.group(2).strip()
 
-            return {k: v for k, v in info.items() if v}
+                # Categorize transaction
+                category = self._categorize_merchant(merchant)
 
-        except Exception as e:
-            logging.error({"action": "identity_extraction_failed", "error": str(e)})
-            return {}
+                if amount > 0:
+                    spending["by_category"][category] += amount
+                    spending["by_merchant"][merchant] += amount
 
-    async def _extract_portfolio_info(self, email: Dict) -> Dict:
-        try:
+                    if date:
+                        month_key = pd.to_datetime(date).strftime("%Y-%m")
+                        spending["monthly"][month_key] += amount
+
+                    spending["transactions"].append(
+                        {
+                            "date": date,
+                            "amount": amount,
+                            "merchant": merchant,
+                            "category": category,
+                        }
+                    )
+
+        return dict(spending)
+
+    def analyze_identity(self, emails: List[Dict]) -> Dict:
+        identity = {"verifications": [], "otps": [], "documents": defaultdict(list)}
+
+        for email in emails:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
-            patterns = self.patterns["portfolio"]
+            date = email.get("date")
 
-            info = {
-                "timestamp": email.get("date"),
-                "stock_symbol": self._extract_pattern(
-                    content, patterns["stock_symbol"]
-                ),
-                "quantity": self._extract_pattern(content, patterns["quantity"]),
-                "price": self._extract_amount(content, patterns["price"]),
-                "transaction_type": self._extract_pattern(
-                    content, patterns["transaction_type"]
-                ),
-                "order_status": self._extract_pattern(
-                    content, patterns["order_status"]
-                ),
-                "exchange": self._extract_pattern(content, patterns["exchange"]),
-                "dividend": self._extract_amount(content, patterns["dividend"]),
-                "mutual_fund": self._extract_pattern(content, patterns["mutual_fund"]),
-                "nav": self._extract_amount(content, patterns["nav"]),
-            }
+            # Extract OTPs
+            otp_match = re.search(self.patterns["identity"]["otp"], content)
+            if otp_match:
+                identity["otps"].append(
+                    {
+                        "date": date,
+                        "sender": email.get("sender"),
+                        "otp": otp_match.group(1),
+                    }
+                )
 
-            return {k: v for k, v in info.items() if v}
+            # Extract document verifications
+            for doc_type, pattern in [
+                ("aadhaar", self.patterns["identity"]["aadhaar"]),
+                ("pan", self.patterns["identity"]["pan"]),
+            ]:
+                if re.search(pattern, content):
+                    identity["documents"][doc_type].append(
+                        {
+                            "date": date,
+                            "sender": email.get("sender"),
+                            "status": self._extract_verification_status(content),
+                        }
+                    )
 
-        except Exception as e:
-            logging.error({"action": "portfolio_extraction_failed", "error": str(e)})
-            return {}
+        return dict(identity)
 
-    async def _extract_travel_info(self, email: Dict) -> Dict:
-        try:
+    def analyze_portfolio(self, emails: List[Dict]) -> Dict:
+        portfolio = {
+            "transactions": [],
+            "holdings": defaultdict(float),
+            "notifications": [],
+        }
+
+        for email in emails:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
-            patterns = self.patterns["travel"]
+            date = email.get("date")
 
-            info = {
-                "timestamp": email.get("date"),
-                "pnr": self._extract_pattern(content, patterns["pnr"]),
-                "flight": self._extract_pattern(content, patterns["flight"]),
-                "train": self._extract_pattern(content, patterns["train"]),
-                "booking_id": self._extract_pattern(content, patterns["booking_id"]),
-                "source": self._extract_pattern(content, patterns["source"]),
-                "destination": self._extract_pattern(content, patterns["destination"]),
-                "travel_date": self._extract_date(content, patterns["travel_date"]),
-                "amount": self._extract_amount(content, patterns["amount"]),
-            }
+            # Extract trading activity
+            if any(
+                term in content.lower()
+                for term in ["trade", "buy", "sell", "purchased", "sold"]
+            ):
+                price_match = re.search(self.patterns["portfolio"]["price"], content)
+                qty_match = re.search(self.patterns["portfolio"]["quantity"], content)
 
-            return {k: v for k, v in info.items() if v}
+                if price_match and qty_match:
+                    portfolio["transactions"].append(
+                        {
+                            "date": date,
+                            "price": float(price_match.group(1).replace(",", "")),
+                            "quantity": int(qty_match.group(1)),
+                            "type": "buy" if "buy" in content.lower() else "sell",
+                        }
+                    )
 
-        except Exception as e:
-            logging.error({"action": "travel_extraction_failed", "error": str(e)})
-            return {}
+        return portfolio
+
+    def analyze_travel(self, emails: List[Dict]) -> Dict:
+        travel = {
+            "flights": [],
+            "hotels": [],
+            "transport": [],
+            "locations": defaultdict(int),
+            "routes": defaultdict(int),
+        }
+
+        for email in emails:
+            content = f"{email.get('subject', '')} {email.get('content', '')}"
+            date = email.get("date")
+
+            # Extract flight information
+            flight_match = re.search(self.patterns["travel"]["flight"], content)
+            if flight_match:
+                source_dest_match = re.search(
+                    self.patterns["travel"]["source_dest"], content
+                )
+                if source_dest_match:
+                    source = source_dest_match.group(1).strip()
+                    dest = source_dest_match.group(2).strip()
+
+                    travel["flights"].append(
+                        {
+                            "date": date,
+                            "flight": flight_match.group(1),
+                            "source": source,
+                            "destination": dest,
+                        }
+                    )
+
+                    travel["locations"][source] += 1
+                    travel["locations"][dest] += 1
+                    travel["routes"][f"{source}-{dest}"] += 1
+
+            # Extract hotel stays
+            hotel_match = re.search(self.patterns["travel"]["hotel"], content)
+            if hotel_match:
+                travel["hotels"].append(
+                    {
+                        "date": date,
+                        "hotel": hotel_match.group(1).strip(),
+                        "location": self._extract_location(content),
+                    }
+                )
+
+        return travel
+
+    def generate_insights(self, analysis_results: Dict) -> List[str]:
+        insights = []
+
+        # Credit card insights
+        if analysis_results.get("credit_analysis"):
+            credit = analysis_results["credit_analysis"]
+            insights.extend(self._generate_credit_insights(credit))
+
+        # Spending insights
+        if analysis_results.get("spending_analysis"):
+            spending = analysis_results["spending_analysis"]
+            insights.extend(self._generate_spending_insights(spending))
+
+        # Travel insights
+        if analysis_results.get("travel_analysis"):
+            travel = analysis_results["travel_analysis"]
+            insights.extend(self._generate_travel_insights(travel))
+
+        return insights
 
     def _extract_pattern(self, text: str, pattern: str) -> Optional[str]:
-        try:
-            match = re.search(pattern, text, re.IGNORECASE)
-            return match.group(1) if match else None
-        except Exception:
-            return None
+        match = re.search(pattern, text, re.IGNORECASE)
+        return match.group(1).strip() if match else None
+
+    def _extract_card_number(self, text: str) -> Optional[str]:
+        for pattern in self.patterns["credit_card"]["card_numbers"]:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1)
+        return None
 
     def _extract_amount(self, text: str, pattern: str) -> Optional[float]:
-        try:
-            amount_str = self._extract_pattern(text, pattern)
-            if amount_str:
-                return float(amount_str.replace(",", ""))
-            return None
-        except Exception:
-            return None
+        match = re.search(pattern, text)
+        if match:
+            try:
+                return float(match.group(1).replace(",", ""))
+            except (ValueError, IndexError):
+                return None
+        return None
 
     def _extract_date(self, text: str, pattern: str) -> Optional[str]:
-        try:
-            date_str = self._extract_pattern(text, pattern)
-            if date_str:
+        match = re.search(pattern, text)
+        if match:
+            try:
+                date_str = match.group(1)
                 for fmt in ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"]:
                     try:
                         return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
                     except ValueError:
                         continue
-            return None
-        except Exception:
-            return None
+            except (ValueError, IndexError):
+                return None
+        return None
 
-    def _extract_statement_period(
-        self, text: str, pattern: str
-    ) -> Optional[Dict[str, str]]:
-        try:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match and len(match.groups()) == 2:
-                return {
-                    "from": self._extract_date(
-                        match.group(1), r"\d{1,2}[-/]\d{1,2}[-/]\d{4}"
-                    ),
-                    "to": self._extract_date(
-                        match.group(2), r"\d{1,2}[-/]\d{1,2}[-/]\d{4}"
-                    ),
-                }
-            return None
-        except Exception:
-            return None
+    def _categorize_merchant(self, merchant: str) -> str:
+        merchant_lower = merchant.lower()
 
-    async def _finalize_results(self, results: Dict) -> Dict:
-        try:
-            final_results = {
-                "credit_analysis": await self._analyze_credit_trends(
-                    results["credit_analysis"]
-                ),
-                "spending_analysis": await self._analyze_spending_trends(
-                    results["spending_analysis"]
-                ),
-                "identity_analysis": await self._analyze_identity_trends(
-                    results["identity_analysis"]
-                ),
-                "portfolio_analysis": await self._analyze_portfolio_trends(
-                    results["portfolio_analysis"]
-                ),
-                "travel_analysis": await self._analyze_travel_trends(
-                    results["travel_analysis"]
-                ),
-                "summary": await self._generate_summary(results),
-            }
+        for category, keywords in self.categories.items():
+            if any(keyword in merchant_lower for keyword in keywords):
+                return category
 
-            return final_results
+        return "others"
 
-        except Exception as e:
-            logging.error({"action": "results_finalization_failed", "error": str(e)})
-            raise
+    def _extract_verification_status(self, text: str) -> str:
+        status_keywords = {
+            "success": ["successful", "completed", "verified"],
+            "failure": ["failed", "rejected", "unsuccessful"],
+            "pending": ["pending", "in process", "initiated"],
+        }
 
-    async def _analyze_credit_trends(self, credit_data: List[Dict]) -> Dict:
-        try:
-            if not credit_data:
-                return {}
+        text_lower = text.lower()
+        for status, keywords in status_keywords.items():
+            if any(keyword in text_lower for keyword in keywords):
+                return status
 
-            df = pd.DataFrame(credit_data)
-            analysis = {
-                "cards": self._analyze_cards(df),
-                "spending_trends": self._analyze_spending_patterns(df),
-                "payment_behavior": self._analyze_payment_behavior(df),
-                "credit_utilization": self._analyze_credit_utilization(df),
-            }
+        return "unknown"
 
-            return analysis
+    def _extract_location(self, text: str) -> Optional[str]:
+        # Add location extraction logic here
+        return None
 
-        except Exception as e:
-            logging.error({"action": "credit_trends_analysis_failed", "error": str(e)})
-            return {}
+    def _generate_credit_insights(self, credit_data: Dict) -> List[str]:
+        insights = []
+        total_cards = len(credit_data)
 
-    def _analyze_cards(self, df: pd.DataFrame) -> Dict:
-        try:
-            cards_info = {}
-            for card_number in df["card_number"].unique():
-                card_df = df[df["card_number"] == card_number]
-                cards_info[card_number] = {
-                    "bank": card_df["bank"].iloc[0],
-                    "card_type": card_df["card_type"].iloc[0],
-                    "credit_limit": card_df["credit_limit"].max(),
-                    "highest_bill": card_df["amount"].max(),
-                    "average_bill": card_df["amount"].mean(),
-                    "total_transactions": len(card_df),
-                }
-            return cards_info
-        except Exception:
-            return {}
+        if total_cards > 0:
+            insights.append(f"Active credit cards: {total_cards}")
 
-    def _analyze_spending_patterns(self, df: pd.DataFrame) -> Dict:
-        try:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-            monthly_spending = df.groupby(df["timestamp"].dt.strftime("%Y-%m"))[
-                ["amount"]
-            ].sum()
-            return {
-                "monthly_totals": monthly_spending["amount"].to_dict(),
-                "average_monthly": float(monthly_spending["amount"].mean()),
-                "highest_month": {
-                    "month": monthly_spending["amount"].idxmax(),
-                    "amount": float(monthly_spending["amount"].max()),
-                },
-            }
-        except Exception:
-            return {}
+            # Spending patterns
+            for card_id, info in credit_data.items():
+                bank = card_id.split("_")[0].upper()
+                card_spent = sum(t["amount"] for t in info["transactions"])
+                if card_spent > 0:
+                    insights.append(
+                        f"{bank} card ending {card_id.split('_')[1]}: ₹{card_spent:,.2f}"
+                    )
 
-    def _analyze_payment_behavior(self, df: pd.DataFrame) -> Dict:
-        try:
-            df["due_date"] = pd.to_datetime(df["due_date"])
-            df["days_to_due"] = (
-                df["due_date"] - pd.to_datetime(df["timestamp"])
-            ).dt.days
+                # Payment behavior
+                if info.get("statements"):
+                    on_time_payments = sum(
+                        1
+                        for s in info["statements"]
+                        if pd.to_datetime(s["date"]) <= pd.to_datetime(s["due_date"])
+                    )
+                    payment_ratio = on_time_payments / len(info["statements"])
+                    if payment_ratio >= 0.9:
+                        insights.append(f"Excellent payment history for {bank} card")
+                    elif payment_ratio < 0.7:
+                        insights.append(f"Late payment alerts for {bank} card")
 
-            return {
-                "average_days_to_due": float(df["days_to_due"].mean()),
-                "min_payments_count": len(df[df["amount"] == df["min_due"]]),
-                "full_payments_count": len(df[df["amount"] > df["min_due"]]),
-                "payment_pattern": {
-                    "early": len(df[df["days_to_due"] > 5]),
-                    "ontime": len(df[df["days_to_due"].between(0, 5)]),
-                    "delayed": len(df[df["days_to_due"] < 0]),
-                },
-            }
-        except Exception:
-            return {}
+        return insights
 
-    def _analyze_credit_utilization(self, df: pd.DataFrame) -> Dict:
-        try:
-            df["utilization"] = (df["amount"] / df["credit_limit"]) * 100
-            return {
-                "average_utilization": float(df["utilization"].mean()),
-                "max_utilization": float(df["utilization"].max()),
-                "utilization_brackets": {
-                    "low": len(df[df["utilization"] <= 30]),
-                    "medium": len(df[df["utilization"].between(30, 70)]),
-                    "high": len(df[df["utilization"] > 70]),
-                },
-            }
-        except Exception:
-            return {}
-
-    async def _analyze_spending_trends(self, spending_data: List[Dict]) -> Dict:
-        try:
-            if not spending_data:
-                return {}
-
-            df = pd.DataFrame(spending_data)
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-            analysis = {
-                "merchant_analysis": self._analyze_merchants(df),
-                "category_analysis": self._analyze_categories(df),
-                "payment_methods": self._analyze_payment_methods(df),
-                "rewards_analysis": self._analyze_rewards(df),
-                "temporal_analysis": self._analyze_temporal_patterns(df),
-            }
-
-            return analysis
-
-        except Exception as e:
-            logging.error(
-                {"action": "spending_trends_analysis_failed", "error": str(e)}
-            )
-            return {}
-
-    def _analyze_merchants(self, df: pd.DataFrame) -> Dict:
-        try:
-            merchant_spending = (
-                df.groupby("merchant")["transaction_amount"]
-                .agg(["sum", "count", "mean"])
-                .round(2)
-            )
-
-            return {
-                "top_merchants": merchant_spending.nlargest(5, "sum").to_dict("index"),
-                "frequent_merchants": merchant_spending.nlargest(5, "count").to_dict(
-                    "index"
-                ),
-                "merchant_categories": df.groupby(["merchant", "category"])
-                .size()
-                .to_dict(),
-            }
-        except Exception:
-            return {}
-
-    def _analyze_categories(self, df: pd.DataFrame) -> Dict:
-        try:
-            category_spending = (
-                df.groupby("category")["transaction_amount"]
-                .agg(["sum", "count", "mean"])
-                .round(2)
-            )
-
-            monthly_category = (
-                df.groupby([df["timestamp"].dt.strftime("%Y-%m"), "category"])[
-                    "transaction_amount"
-                ]
-                .sum()
-                .to_dict()
-            )
-
-            return {
-                "category_totals": category_spending.to_dict("index"),
-                "monthly_category_trends": monthly_category,
-                "top_categories": category_spending.nlargest(5, "sum").index.tolist(),
-            }
-        except Exception:
-            return {}
-
-    def _analyze_payment_methods(self, df: pd.DataFrame) -> Dict:
-        try:
-            payment_method_stats = (
-                df.groupby("payment_method")
-                .agg(
-                    {
-                        "transaction_amount": ["sum", "count", "mean"],
-                        "cashback": ["sum", "mean"],
-                        "discount": ["sum", "mean"],
-                    }
-                )
-                .round(2)
-            )
-
-            return {
-                "method_usage": payment_method_stats.to_dict(),
-                "preferred_method": df["payment_method"].mode().iloc[0],
-                "method_by_amount": df.groupby("payment_method")["transaction_amount"]
-                .sum()
-                .sort_values(ascending=False)
-                .to_dict(),
-            }
-        except Exception:
-            return {}
-
-    async def _analyze_identity_trends(self, identity_data: List[Dict]) -> Dict:
-        try:
-            if not identity_data:
-                return {}
-
-            df = pd.DataFrame(identity_data)
-
-            analysis = {
-                "verification_stats": self._analyze_verifications(df),
-                "document_stats": self._analyze_documents(df),
-                "temporal_patterns": self._analyze_verification_timing(df),
-                "security_indicators": self._analyze_security_patterns(df),
-            }
-
-            return analysis
-
-        except Exception as e:
-            logging.error(
-                {"action": "identity_trends_analysis_failed", "error": str(e)}
-            )
-            return {}
-
-    def _analyze_verifications(self, df: pd.DataFrame) -> Dict:
-        try:
-            return {
-                "total_verifications": len(df),
-                "verification_status": df["verification_status"]
-                .value_counts()
-                .to_dict(),
-                "verification_types": {
-                    "aadhaar": df["aadhaar"].notna().sum(),
-                    "pan": df["pan"].notna().sum(),
-                    "passport": df["passport"].notna().sum(),
-                    "driving_license": df["driving_license"].notna().sum(),
-                    "voter_id": df["voter_id"].notna().sum(),
-                    "gstin": df["gstin"].notna().sum(),
-                },
-            }
-        except Exception:
-            return {}
-
-    async def _analyze_portfolio_trends(self, portfolio_data: List[Dict]) -> Dict:
-        try:
-            if not portfolio_data:
-                return {}
-
-            df = pd.DataFrame(portfolio_data)
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-            analysis = {
-                "trading_analysis": self._analyze_trading_patterns(df),
-                "holdings_analysis": self._analyze_holdings(df),
-                "performance_metrics": self._analyze_performance(df),
-                "dividend_analysis": self._analyze_dividends(df),
-            }
-
-            return analysis
-
-        except Exception as e:
-            logging.error(
-                {"action": "portfolio_trends_analysis_failed", "error": str(e)}
-            )
-            return {}
-
-    async def _analyze_travel_trends(self, travel_data: List[Dict]) -> Dict:
-        try:
-            if not travel_data:
-                return {}
-
-            df = pd.DataFrame(travel_data)
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-            analysis = {
-                "travel_patterns": self._analyze_travel_patterns(df),
-                "expense_analysis": self._analyze_travel_expenses(df),
-                "destination_analysis": self._analyze_destinations(df),
-                "booking_patterns": self._analyze_booking_behavior(df),
-            }
-
-            return analysis
-
-        except Exception as e:
-            logging.error({"action": "travel_trends_analysis_failed", "error": str(e)})
-            return {}
-
-    async def _generate_summary(self, results: Dict) -> Dict:
-        try:
-            summary = {
-                "total_emails_analyzed": sum(results["summary"].values()),
-                "category_distribution": dict(results["summary"]),
-                "key_insights": await self._generate_key_insights(results),
-                "analysis_timestamp": datetime.now().isoformat(),
-            }
-
-            return summary
-
-        except Exception as e:
-            logging.error({"action": "summary_generation_failed", "error": str(e)})
-            return {}
-
-    async def _generate_key_insights(self, results: Dict) -> List[str]:
+    def _generate_spending_insights(self, spending_data: Dict) -> List[str]:
         insights = []
 
-        try:
-            # Credit insights
-            if results["credit_analysis"]:
-                credit_data = results["credit_analysis"]
-                insights.extend(
-                    [
-                        f"Found {len(credit_data)} credit card(s) in use",
-                        "High credit utilization detected"
-                        if any(card.get("utilization", 0) > 70 for card in credit_data)
-                        else "Credit utilization is within safe limits",
-                    ]
+        # Category analysis
+        if spending_data["by_category"]:
+            total_spent = sum(spending_data["by_category"].values())
+            insights.append(f"Total spending: ₹{total_spent:,.2f}")
+
+            # Top categories
+            top_categories = sorted(
+                spending_data["by_category"].items(), key=lambda x: x[1], reverse=True
+            )[:3]
+            cat_text = ", ".join(f"{cat}: ₹{amt:,.2f}" for cat, amt in top_categories)
+            insights.append(f"Top spending categories: {cat_text}")
+
+            # Monthly trend
+            if spending_data["monthly"]:
+                months = sorted(spending_data["monthly"].items())
+                if len(months) > 1:
+                    latest = months[-1][1]
+                    previous = months[-2][1]
+                    change = (latest - previous) / previous * 100
+                    insights.append(
+                        f"Monthly spending {'increased' if change > 0 else 'decreased'} by {abs(change):.1f}%"
+                    )
+
+        return insights
+
+    def _generate_travel_insights(self, travel_data: Dict) -> List[str]:
+        insights = []
+
+        if travel_data["flights"]:
+            total_flights = len(travel_data["flights"])
+            insights.append(f"Total flights: {total_flights}")
+
+            # Popular routes
+            if travel_data["routes"]:
+                top_routes = sorted(
+                    travel_data["routes"].items(), key=lambda x: x[1], reverse=True
+                )[:3]
+                routes_text = ", ".join(
+                    f"{route}: {count}x" for route, count in top_routes
+                )
+                insights.append(f"Most frequent routes: {routes_text}")
+
+            # Location frequency
+            if travel_data["locations"]:
+                top_locations = sorted(
+                    travel_data["locations"].items(), key=lambda x: x[1], reverse=True
+                )[:3]
+                loc_text = ", ".join(f"{loc}: {count}x" for loc, count in top_locations)
+                insights.append(f"Most visited: {loc_text}")
+
+        return insights
+
+    def generate_heatmap_data(self, travel_data: Dict) -> List[Dict]:
+        heatmap_data = []
+
+        # Process routes for heatmap
+        for route, frequency in travel_data["routes"].items():
+            source, destination = route.split("-")
+            heatmap_data.append(
+                {
+                    "source": source.strip(),
+                    "destination": destination.strip(),
+                    "weight": frequency,
+                    "value": frequency * 100,  # Scale for visualization
+                }
+            )
+
+        return heatmap_data
+
+    def analyze_portfolio_metrics(self, portfolio_data: Dict) -> Dict:
+        metrics = {
+            "total_transactions": len(portfolio_data["transactions"]),
+            "buy_sell_ratio": 0,
+            "average_transaction_size": 0,
+            "position_changes": [],
+        }
+
+        if portfolio_data["transactions"]:
+            buys = sum(1 for t in portfolio_data["transactions"] if t["type"] == "buy")
+            sells = len(portfolio_data["transactions"]) - buys
+            metrics["buy_sell_ratio"] = buys / sells if sells > 0 else float("inf")
+
+            # Calculate average transaction size
+            total_value = sum(
+                t["price"] * t["quantity"] for t in portfolio_data["transactions"]
+            )
+            metrics["average_transaction_size"] = total_value / len(
+                portfolio_data["transactions"]
+            )
+
+            # Track position changes
+            sorted_txns = sorted(
+                portfolio_data["transactions"], key=lambda x: x["date"]
+            )
+            for txn in sorted_txns:
+                metrics["position_changes"].append(
+                    {
+                        "date": txn["date"],
+                        "value_change": txn["price"]
+                        * txn["quantity"]
+                        * (1 if txn["type"] == "buy" else -1),
+                    }
                 )
 
-            # Spending insights
-            if results["spending_analysis"]:
-                spending_data = results["spending_analysis"]
-                insights.extend(
-                    [
-                        f"Most frequent spending category: {spending_data.get('top_category', 'N/A')}",
-                        f"Preferred payment method: {spending_data.get('preferred_method', 'N/A')}",
-                    ]
-                )
-
-            # Portfolio insights
-            if results["portfolio_analysis"]:
-                portfolio_data = results["portfolio_analysis"]
-                insights.extend(
-                    [
-                        f"Active investments in {len(portfolio_data.get('holdings', []))} instruments",
-                        f"Recent trading activity: {portfolio_data.get('recent_activity', 'Low')}",
-                    ]
-                )
-
-            return insights
-
-        except Exception as e:
-            logging.error({"action": "insight_generation_failed", "error": str(e)})
-            return ["Analysis completed but insights generation failed"]
+        return metrics
