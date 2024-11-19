@@ -753,34 +753,3 @@ class EmailAnalyzer:
     @staticmethod
     def _get_top_items(data: Dict, limit: int) -> Dict:
         return dict(sorted(data.items(), key=lambda x: x[1], reverse=True)[:limit])
-
-
-if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
-    # Initialize analyzer
-    analyzer = EmailAnalyzer()
-
-    # Example usage
-    example_emails = [
-        {
-            "subject": "Your Credit Card Statement",
-            "content": "Your HDFC credit card ending 1234 has a total due of Rs. 50,000 due on 25/12/2023",
-        },
-        {
-            "subject": "Order Confirmation",
-            "content": "Your order from Amazon for Rs. 2,500 has been confirmed",
-        },
-    ]
-
-    # Process emails
-    results = analyzer.process_emails(example_emails)
-
-    # Generate summary
-    summary = analyzer.get_summary_report(results)
-
-    print("Analysis complete. Check logs for details.")
