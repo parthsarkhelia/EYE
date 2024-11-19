@@ -7,6 +7,7 @@ from src.core import encode_access_token, mongo
 from src.models.google_auth import GoogleUser, GoogleUserInfo
 from src.secrets import secrets
 from src.utils import constant
+from src.controller.google_email import get_email
 
 CLIENT_ID = secrets["google_client_id"]
 CLIENT_SECRET = secrets["google_client_secret"]
@@ -70,8 +71,12 @@ def authenticate_google_user(context, code: str) -> (int, dict):
                 }
             )
             return 400, {"message": constant.PROCESSING_ERROR}
-
+        
+        
         headers = {"Authorization": f"Bearer {access_token}"}
+        # call get email
+        status_code, resp = get_email(context, access_token)
+        logging.info(resp)
         user_info_response = httpx.get(USER_INFO_URL, headers=headers, timeout=25)
 
         if user_info_response.status_code != 200:
