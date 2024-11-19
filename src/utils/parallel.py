@@ -3,6 +3,7 @@ import aiohttp
 from typing import List, Dict
 import time
 import requests
+import logging
 
 
 async def make_post_request(
@@ -61,81 +62,81 @@ async def call_apis_parallel(endpoints: List[Dict]) -> Dict:
 
         return merged_response
 
-
 def get_alternate_service_response(endpoints: List[Dict]):
     return asyncio.run(call_apis_parallel(endpoints))
 
 
 # print(merged_resposne(endpoints_to_call))
-endpoints_to_call = [
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/email-intelligence",
-        "data": {"email": "john.doe@dummy.com"},
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
+def get_alt_data_requests(phone, name, email):
+    return [
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/email-intelligence",
+            "data": {"email": email},
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-    },
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/email-name-attributes",
-        "data": {
-            "name": "Anurag Chaubey",
-            "email": "anuragchaubey2@gmail.com",
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/email-name-attributes",
+            "data": {
+                "name": name,
+                "email": email,
+            },
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/email-social-advance",
+            "data": {"email": email},
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-    },
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/email-social-advance",
-        "data": {"email": "rainpatter88@gmail.com"},
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-name",
+            "data": {"phoneNumber": phone, "countryCode": "IND"},
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-    },
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-name",
-        "data": {"phoneNumber": "919408040163", "countryCode": "IND"},
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-name-attributes",
+            "data": {
+                "name": name,
+                "phoneNumber": phone,
+                "serviceType": "PREMIUM_QUICK",
+            },
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-    },
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-name-attributes",
-        "data": {
-            "name": "Priyam",
-            "phoneNumber": "918309609061",
-            "serviceType": "PREMIUM_QUICK",
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-social-advance",
+            "data": {
+                "phoneNumber": phone,
+                "countryCode": "IND",
+                "requestedServices": [],
+            },
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
+        {
+            "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-network",
+            "data": {"phoneNumber": phone},
+            "headers": {
+                "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
+                "Content-Type": "application/json",
+            },
         },
-    },
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-social-advance",
-        "data": {
-            "phoneNumber": "917289982200",
-            "countryCode": "IND",
-            "requestedServices": [],
-        },
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
-        },
-    },
-    {
-        "url": "https://api.overwatch.stg.bureau.id/v2/services/phone-network",
-        "data": {"phoneNumber": "919839009836"},
-        "headers": {
-            "Authorization": "Basic Zjg0MzAxMmItNWMxZC00MTgyLWIwMDktN2FkY2FhNTVlZmJhOjAzNzdhOGZlLTNiZDktNDkyZC1iZjI1LTlkN2VkZTAwYmM3Zg==",
-            "Content-Type": "application/json",
-        },
-    },
-]
+    ]
 
 
 def get_risk_service_response(service_response):
@@ -213,7 +214,6 @@ def get_risk_service_response(service_response):
     ]
     })
 
-    print(payload,)
     headers = {
     'Authorization': 'Basic ZTBhMmNhYTYtYzFjMy00YTI0LjTkzMzktNzc3YzE5MmI3ZWJiOjVkMGM0NDg3LTY4NTItNGRkNi05YWZmLTZkNmEyNWRkMjBkOQ==',
     'Content-Type': 'application/json'
@@ -223,13 +223,13 @@ def get_risk_service_response(service_response):
     try:
         response = requests.post(url, headers=headers, data=payload)
         response.raise_for_status()
-        print(response.json())
+        logging.info(response.json())
         return response.json()
     except requests.exceptions.HTTPError as http_err:
-        print(f"HTTP error occurred: {http_err}")
+        logging.info(f"HTTP error occurred: {http_err}")
         return None
     except requests.exceptions.RequestException as err:
-        print(f"Error occurred: {err}")
+        logging.info(f"Error occurred: {err}")
         return None
 
 

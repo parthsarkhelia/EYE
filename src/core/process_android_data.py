@@ -3,16 +3,13 @@ import json
 import logging
 from typing import Dict, Optional
 from datetime import datetime
-from src.utils.utils import create_response,do_http_request
+from src.utils import utils,parallel
 import requests
-import logging
-
-from src import utils    
+import logging   
 from src.secrets import secrets
 
 KEY_SUCCESS = "success"
 KEY_STATUS = "status"
-from src.utils.parallel import get_alternate_service_response,endpoints_to_call,get_risk_service_response
 
 async def bureau_eye_submit(
     context,
@@ -26,26 +23,30 @@ async def bureau_eye_submit(
         device_fingerprint_response = await get_device_insights(device_data=device_data,auth_credential=auth_credential)
         
         if device_fingerprint_response[KEY_STATUS] != KEY_SUCCESS:
-            return create_response(
+            return utils.create_response(
                 status="error",
                 error="Internal Server Error",
                 message=f"Failed to fetch device insights: {device_fingerprint_response["message"]}",
                 response=device_fingerprint_response
             )
-        
         logging.info("succesfully fetched device insights!") 
+        
         name, phone_number, email = await get_user_details_from_userId(userId)
         logging.info("fetched user details from userId",name,phone_number,email)
-        sevice_response=get_alternate_service_response(endpoints_to_call)
-        logging.info({"Service Resposne":sevice_response})
+        
+        alt_data_requests = parallel.get_alt_data_requests(phone_number,name,email)
+        
+        sevice_response= parallel.get_alternate_service_response(alt_data_requests)
+        logging.info({"Service Response":sevice_response})
 
-        risk_model_response=get_risk_service_response(service_response=sevice_response)
+        risk_model_response=parallel.get_risk_service_response(service_response=sevice_response)
+        logging.info({"risk_model_response":risk_model_response})
         if risk_model_response==None:
             raise Exception("Didn't get response from risk model")
         
         
     except Exception as e:
-        return create_response(
+        return utils.create_response(
             status="error",
             error="Internal Server Error",
             message=str(e)
@@ -65,7 +66,7 @@ async def get_device_insights(
             'X-Bureau-Auth-Credential-ID': auth_credential,
             'X-Bureau-Client-Ip' : user_ip
         }
-        device_response = do_http_request(
+        device_response = utils.do_http_request(
             url=url, 
             headers=headers, 
             request_body=device_data,
@@ -82,14 +83,14 @@ async def get_device_insights(
                 "sessionId": session_id,
             }
             
-            device_insights_response = do_http_request(
+            device_insights_response = utils.do_http_request(
                 url=get_url, 
                 headers=headers, 
                 request_body=request_body,
                 request_type="POST"
             )
             if device_insights_response[KEY_STATUS] == KEY_SUCCESS:
-                return create_response(
+                return utils.create_response(
                     status="success",
                     message="Succesfully done post!",
                     response=device_insights_response
@@ -100,23 +101,29 @@ async def get_device_insights(
                     "error": device_insights_response["error"],
                     "description": device_insights_response["message"],
                 })
-                return create_response(
+                return utils.create_response(
                     status="error",
                     message="failed to get device insights!",
                     error="Internal Server Error",
                     response=device_insights_response
                 )
         else:
-            logging.error("failed to post device data",device_response)
-            return create_response(
+            logging.error({
+                "error":"failed to post device data",
+                "description":device_response,
+            })
+            return utils.create_response(
                 status="error",
                 message=f"failed to submit device data: {device_response['message']}",
                 error="Internal Server Error",
                 response=device_response
             )
     except Exception as e:
-        logging.exception("Exception: failed to post device data",str(e))
-        return create_response(
+        logging.exception({
+            "Exception": "failed to post device data",
+            "description":str(e),
+        })
+        return utils.create_response(
             status="error",
             error="Internal Server Error",
             message=f"Got Exception: {str(e)}"
@@ -128,19 +135,20 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
     try:
         # Split string by underscore
         components = userId.split('_')
+        print("DhruvLogs: ",components)
         
         if len(components) != 3:
             raise ValueError("Invalid userId format. Expected format: name_phoneNumber_email")
             
         name, phone_number, email = components
         
-        # Basic validation
-        if not all([name, phone_number, email]):
-            raise ValueError("All components (name, phone, email) must be non-empty")
-            
+        print(f"{name}, {phone_number}, {email}")
+        
         if '@' not in email:
             raise ValueError("Invalid email format")
-            
+        
+        print("Split ho gaya oye!")
+        
         return name, phone_number, email
         
     except Exception as e:
