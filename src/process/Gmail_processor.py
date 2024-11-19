@@ -228,7 +228,7 @@ class GmailFetcher:
         # logging.info({"unique_id":unique_id})
         return results
 
-def gmail_processor(context, access_token: str, mongoUri: str, dbName: str, data: List[Dict]):
+def gmail_processor(context, access_token: str, mongoUri: str, dbName: str, data: List[Dict], uid: str):
 
     # Initialize fetcher
     fetcher = GmailFetcher(access_token, mongoUri, dbName)
@@ -249,7 +249,7 @@ def gmail_processor(context, access_token: str, mongoUri: str, dbName: str, data
     # Initialize StoredEmailAnalysisRequest
     request = StoredEmailAnalysisRequest(
         unique_id=results["unique_id"],
-        user_id="user001",
+        user_id=uid,
         settings={}
     )
     create_analysis_from_stored_emails(context, request)

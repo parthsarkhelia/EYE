@@ -18,13 +18,14 @@ USER_INFO_URL = secrets["google_user_info_url"]
 SOCIAL_AUTH_REDIRECTION_URL = secrets["social_auth_redirection_url"]
 
 
-def get_google_auth_url(context) -> (int, dict):
+def get_google_auth_url(context, uid: str) -> (int, dict):
     try:
         params = {
             "client_id": CLIENT_ID,
             "redirect_uri": REDIRECT_URI,
             "response_type": "code",
             "scope": "openid%20email%20profile https://www.googleapis.com/auth/gmail.readonly",
+            "state": uid,
         }
 
         auth_url = f"{AUTHENTICATION_URL}?" + "&".join(
@@ -40,12 +41,12 @@ def get_google_auth_url(context) -> (int, dict):
         return 400, {"message": constant.PROCESSING_ERROR}
 
 # BAckground task for the fetching the email and starting the processing
-def background_task(context, access_token):
+def background_task(context, access_token: str, uid: str):
     # call get email
-    status_code, resp = get_email(context, access_token)
+    status_code, resp = get_email(context, access_token, uid)
     logging.info({"getEmailOutput": resp, "status": status_code})
 
-def authenticate_google_user(context, code: str) -> (int, dict):
+def authenticate_google_user(context, code: str, uid: str) -> (int, dict):
     try:
         data = {
             "client_id": CLIENT_ID,
@@ -79,7 +80,7 @@ def authenticate_google_user(context, code: str) -> (int, dict):
             return 400, {"message": constant.PROCESSING_ERROR}
         
         # Start the background task for fetching and processing the email
-        thread = threading.Thread(target=background_task, daemon=True)
+        thread = threading.Thread(target=background_task(context,access_token,uid), daemon=True)
         thread.start()
 
         # headers = {"Authorization": f"Bearer {access_token}"}
