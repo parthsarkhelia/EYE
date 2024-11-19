@@ -110,5 +110,4 @@ def do_http_request(
         return {
             "status": "error",
             "error": "Internal Server Error", 
-            "response": response
         }

@@ -4,6 +4,7 @@ from typing import List, Dict
 import time
 import requests
 import logging
+import json
 
 
 async def make_post_request(
@@ -47,10 +48,12 @@ async def call_apis_parallel(endpoints: List[Dict]) -> Dict:
             )
             for endpoint in endpoints
         ]
+        logging.info("We reached here!!!")
         responses = await asyncio.gather(*tasks)
 
         # Merge responses
         merged_response = {"success": {}, "failed": {}, "execution_time": 0}
+        logging.info({"We reached here!!!":merged_response})
 
         for response in responses:
             if response["status"] == "error" or response["status"] >= 400:
@@ -62,8 +65,9 @@ async def call_apis_parallel(endpoints: List[Dict]) -> Dict:
 
         return merged_response
 
-def get_alternate_service_response(endpoints: List[Dict]):
-    return asyncio.run(call_apis_parallel(endpoints))
+async def get_alternate_service_response(endpoints: List[Dict]):
+    logging.info({"WE reached here":type(endpoints)})
+    return await call_apis_parallel(endpoints)
 
 
 # print(merged_resposne(endpoints_to_call))
@@ -140,7 +144,7 @@ def get_alt_data_requests(phone, name, email):
 
 
 def get_risk_service_response(service_response):
-
+    
     email_intelligence_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-intelligence",{})
     email_name_attributes_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-name-attributes",{})
     email_social_advance_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-social-advance",{})
@@ -158,6 +162,7 @@ def get_risk_service_response(service_response):
     elif whatsapp_business_presence=="Account Not Found":
         whatsapp_business_presence_final="0"
 
+    
     payload = json.dumps({
     "name": "Dhruv Solanki",
     "phone": "917506037403",
@@ -215,7 +220,7 @@ def get_risk_service_response(service_response):
     })
 
     headers = {
-    'Authorization': 'Basic ZTBhMmNhYTYtYzFjMy00YTI0LjTkzMzktNzc3YzE5MmI3ZWJiOjVkMGM0NDg3LTY4NTItNGRkNi05YWZmLTZkNmEyNWRkMjBkOQ==',
+    'Authorization': 'Basic ZTBhMmNhYTYtYzFjMy00YTI0LTkzMzktNzc3YzE5MmI3ZWJiOjVkMGM0NDg3LTY4NTItNGRkNi05YWZmLTZkNmEyNWRkMjBkOQ==',
     'Content-Type': 'application/json'
     }
 
@@ -223,7 +228,6 @@ def get_risk_service_response(service_response):
     try:
         response = requests.post(url, headers=headers, data=payload)
         response.raise_for_status()
-        logging.info(response.json())
         return response.json()
     except requests.exceptions.HTTPError as http_err:
         logging.info(f"HTTP error occurred: {http_err}")

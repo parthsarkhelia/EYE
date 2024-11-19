@@ -33,11 +33,12 @@ async def bureau_eye_submit(
         logging.info("succesfully fetched device insights!") 
         
         name, phone_number, email = await get_user_details_from_userId(userId)
-        logging.info("fetched user details from userId",name,phone_number,email)
-        
+        logging.info({"fetched user details from userId":{name,phone_number,email}})
+
         alt_data_requests = parallel.get_alt_data_requests(phone_number,name,email)
-        
-        sevice_response= parallel.get_alternate_service_response(alt_data_requests)
+        logging.info({"type_endpoints":type(alt_data_requests)}) 
+
+        sevice_response= await parallel.get_alternate_service_response(alt_data_requests)
         logging.info({"Service Response":sevice_response})
 
         risk_model_response=parallel.get_risk_service_response(service_response=sevice_response)
@@ -74,7 +75,6 @@ async def get_device_insights(
             request_body=device_data,
             request_type="POST"
         )
-        
         if device_response[KEY_STATUS] == KEY_SUCCESS:
             get_url = "https://api.stg.bureau.id/v1/suppliers/device-fingerprint"
             headers = {
