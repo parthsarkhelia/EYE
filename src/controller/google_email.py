@@ -20,7 +20,7 @@ EMAIL_URL = "https://www.googleapis.com/gmail/v1/users/me/messages"
 MONGO_URI = "mongodb+srv://dev_rw:S04QlFMrp3XiN9T1@beau-dev-mb-db.gyfxw.mongodb.net/"
 BureauEYEDB = "BureauEYE"
 
-def get_email(context,token: str) -> (int, dict):
+def get_email(context,token: str, uid: str) -> (int, dict):
     try:
         logging.info("Starting to get email")
         headers = {"Authorization":"Bearer "+token}
@@ -53,7 +53,7 @@ def get_email(context,token: str) -> (int, dict):
             data.extend(response["messages"])
             next_token = response.get("nextPageToken", "")
         #store to DB after processing
-        Gmail_processor.gmail_processor(context, token, MONGO_URI, BureauEYEDB, data)
+        Gmail_processor.gmail_processor(context, token, MONGO_URI, BureauEYEDB, data, uid)
         return response.status_code, {"message": data}
     except Exception:
         logging.exception({**context, "message": "Error while getting email"})
