@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Dict, Optional
 from datetime import datetime
+import uuid
 from src.utils import utils,parallel
 import requests
 import logging   
@@ -59,7 +60,8 @@ async def get_device_insights(
     try: 
         url = "https://api.stg.bureau.id/v1/deviceService/deviceData/android"
         user_ip = device_data["networkInfo_"]["iPV4_"]
-        session_id = device_data["sessionId_"]
+        session_id = uuid.uuid4() # todo: add uniqueness in SDK
+        device_data['sessionId_'] = session_id
         
         headers = {
             'Content-Type': 'application/json',
@@ -110,7 +112,7 @@ async def get_device_insights(
         else:
             logging.error({
                 "error":"failed to post device data",
-                "description":device_response,
+                "description":device_response["message"],
             })
             return utils.create_response(
                 status="error",
