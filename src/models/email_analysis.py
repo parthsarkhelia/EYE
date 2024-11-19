@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -8,14 +8,15 @@ class EmailData(BaseModel):
     subject: str
     content: str
     sender: str
-    date: datetime
     recipient: str
-    attachments: Optional[List[str]] = None
+    date: datetime
     labels: Optional[List[str]] = None
+    thread_id: str
+    message_id: str
 
 
 class EmailAnalysisRequest(BaseModel):
-    username: str
+    user_id: str
     emails: List[EmailData]
     analyze_credit: bool = True
     analyze_spending: bool = True
@@ -24,78 +25,41 @@ class EmailAnalysisRequest(BaseModel):
     analyze_travel: bool = True
 
 
-class CreditAnalysis(BaseModel):
-    total_cards: int
-    cards: dict
-    total_due: float
-    upcoming_payments: List[dict]
+class AnalysisSettings(BaseModel):
+    analyze_credit: bool
+    analyze_spending: bool
+    analyze_identity: bool
+    analyze_portfolio: bool
+    analyze_travel: bool
 
 
-class SpendingAnalysis(BaseModel):
-    total_spent: float
-    category_wise: dict
-    merchant_wise: dict
-    monthly_trends: dict
-    payment_methods: dict
-
-
-class IdentityAnalysis(BaseModel):
-    verifications: dict
-    documents: dict
-    recent_activities: List[str]
-    verification_status: dict
-
-
-class PortfolioAnalysis(BaseModel):
-    transactions: dict
-    current_holdings: dict
-    dividend_history: dict
-    activity_summary: dict
-
-
-class TravelAnalysis(BaseModel):
-    visited_locations: dict
-    recent_bookings: List[dict]
-    expense_summary: dict
-    transport_preferences: dict
-    common_routes: dict
-
-
-class EmailAnalysisResponse(BaseModel):
-    username: str
-    analysis_date: datetime
-    credit_analysis: Optional[CreditAnalysis]
-    spending_analysis: Optional[SpendingAnalysis]
-    identity_analysis: Optional[IdentityAnalysis]
-    portfolio_analysis: Optional[PortfolioAnalysis]
-    travel_analysis: Optional[TravelAnalysis]
-    summary: dict
-
-
-class EmailAnalysisRecord(EmailAnalysisResponse):
+class AnalysisRecord(BaseModel):
+    analysis_id: str
+    user_id: str
+    status: str
     created_at: datetime
     updated_at: datetime
+    email_count: int
+    processed_count: int
+    settings: AnalysisSettings
+    error: Optional[str] = None
 
-    def to_mongo(self):
-        return {
-            "username": self.username,
-            "analysis_date": self.analysis_date,
-            "credit_analysis": self.credit_analysis.dict()
-            if self.credit_analysis
-            else None,
-            "spending_analysis": self.spending_analysis.dict()
-            if self.spending_analysis
-            else None,
-            "identity_analysis": self.identity_analysis.dict()
-            if self.identity_analysis
-            else None,
-            "portfolio_analysis": self.portfolio_analysis.dict()
-            if self.portfolio_analysis
-            else None,
-            "travel_analysis": self.travel_analysis.dict()
-            if self.travel_analysis
-            else None,
-            "summary": self.summary,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
+    class Config:
+        orm_mode = True
+
+
+class AnalysisResult(BaseModel):
+    analysis_id: str
+    user_id: str
+    created_at: datetime
+    completed_at: datetime
+    email_count: int
+    credit_analysis: Optional[Dict] = None
+    spending_analysis: Optional[Dict] = None
+    identity_analysis: Optional[Dict] = None
+    portfolio_analysis: Optional[Dict] = None
+    travel_analysis: Optional[Dict] = None
+    summary: Dict
+
+    class Config:
+        orm_mode = True
