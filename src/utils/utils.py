@@ -8,6 +8,11 @@ from http import HTTPStatus
 import jwt
 from src.secrets import secrets
 
+def get_package_names(user_application_list):
+    package_names = []
+    for app in user_application_list:
+        package_names.append(app['packageName_'])
+    return package_names
 
 def generate_token(payload: dict, expiration_hours: int = 24) -> str:
     """

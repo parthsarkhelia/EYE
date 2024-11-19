@@ -19,7 +19,8 @@ async def bureau_eye_submit(
 ) -> Dict:
     try:
         """Process Android device data and perform necessary operations"""
-        user_application_data = device_data["packageManagerInfo_"]["userApplicationList_"]
+        package_name_list = utils.get_package_names(device_data["packageManagerInfo_"]["userApplicationList_"])
+        carrier_info = device_data["systemProperties_"]["systemProperties"]
         userId = device_data["userId_"]
         device_fingerprint_response = await get_device_insights(device_data=device_data,auth_credential=auth_credential)
         
@@ -33,19 +34,17 @@ async def bureau_eye_submit(
         logging.info("succesfully fetched device insights!") 
         
         name, phone_number, email = await get_user_details_from_userId(userId)
-        logging.info({"fetched user details from userId":{name,phone_number,email}})
 
         alt_data_requests = parallel.get_alt_data_requests(phone_number,name,email)
-        logging.info({"type_endpoints":type(alt_data_requests)}) 
 
-        sevice_response= await parallel.get_alternate_service_response(alt_data_requests)
-        logging.info({"Service Response":sevice_response})
+        service_response= await parallel.get_alternate_service_response(alt_data_requests)
 
-        risk_model_response=parallel.get_risk_service_response(service_response=sevice_response)
+        risk_model_response=parallel.get_risk_service_response(service_response=service_response,phone_number=phone_number,name=name,email=email)
         logging.info({"risk_model_response":risk_model_response})
+        
+        signals_output = parallel.get_signals_response(service_response=service_response,risk_model_response=risk_model_response)
         if risk_model_response==None:
             raise Exception("Didn't get response from risk model")
-        
         
     except Exception as e:
         return utils.create_response(
@@ -137,14 +136,14 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
     try:
         # Split string by underscore
         components = userId.split('_')
-        print("DhruvLogs: ",components)
         
         if len(components) != 3:
             raise ValueError("Invalid userId format. Expected format: name_phoneNumber_email")
             
         name, phone_number, email = components
         
-        print(f"{name}, {phone_number}, {email}")
+        if len(phone_number) < 12:
+            raise ValueError("Invalid phone number")
         
         if '@' not in email:
             raise ValueError("Invalid email format")
@@ -152,6 +151,10 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
         return name, phone_number, email
         
     except Exception as e:
+        logging.exception({
+            "message": "failed to parse userId",
+            "Exception": str(e)
+        })
         raise ValueError(f"Failed to parse userId: {str(e)}")       
      
     
