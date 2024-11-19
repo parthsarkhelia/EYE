@@ -1,3 +1,4 @@
+import logging
 import traceback
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
@@ -5,9 +6,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.lib.email_classifier import EmailAnalyzer
 from src.middleware import LoggingMiddleware, RequestIDMiddleware
-from src.routes import google_auth
+from src.routes import email_analysis, google_auth
 from src.secrets import secrets
+from src.utils.init_models import ModelSetup
 
 app = FastAPI(
     title="Bureau EYE API",
@@ -74,8 +77,32 @@ async def exception_handler(request: Request, exc: Exception):
     )
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize models when starting the server"""
+    logging.info({"action": "server_startup", "status": "initializing_models"})
+    try:
+        setup = ModelSetup()
+        setup.setup()
+        app.state.email_analyzer = EmailAnalyzer()
+        logging.info({"action": "server_startup", "status": "initialization_complete"})
+    except Exception as e:
+        logging.error(
+            {
+                "action": "server_startup",
+                "status": "initialization_failed",
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
+        )
+        raise
+
+
 router = APIRouter(redirect_slashes=False)
 router.include_router(
     google_auth.router, prefix="/google-auth", tags=["User Authentication"]
+)
+router.include_router(
+    email_analysis.router, prefix="/email-analysis", tags=["Email Analysis"]
 )
 app.include_router(router)

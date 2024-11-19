@@ -34,6 +34,7 @@ def get_secrets():
         "db_name": os.environ.get("DB_NAME"),
         "user_collection": os.environ.get("USER_COLLECTION"),
         "social_auth_collection": os.environ.get("SOCIAL_AUTH_COLLECTION"),
+        "email_analysis_collection": os.environ.get("EMAIL_ANALYSIS_COLLECTION"),
         # Social Auths Variable
         "social_auth_redirection_url": os.environ.get("SOCIAL_AUTH_REDIRECTION_URL"),
         "google_client_id": os.environ.get("GOOGLE_CLIENT_ID"),

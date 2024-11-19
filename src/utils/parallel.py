@@ -60,9 +60,10 @@ async def call_apis_parallel(endpoints: List[Dict]) -> Dict:
 
         return merged_response
 
-    
+
 def merged_resposne(endpoints: List[Dict]):
     return asyncio.run(call_apis_parallel(endpoints))
+
 
 # print(merged_resposne(endpoints_to_call))
 endpoints_to_call = [
@@ -134,5 +135,3 @@ endpoints_to_call = [
         },
     },
 ]
-
-

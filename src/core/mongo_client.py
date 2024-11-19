@@ -14,6 +14,7 @@ class MongoConnect:
             db = self.db[secrets["db_name"]]
             self.user_collection = db[secrets["user_collection"]]
             self.social_auth_collection = db[secrets["social_auth_collection"]]
+            self.email_analysis_collection = db[secrets["email_analysis_collection"]]
         except ServerSelectionTimeoutError:
             pass
 

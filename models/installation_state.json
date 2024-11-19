@@ -1,0 +1,24 @@
+{
+  "spacy": {
+    "models": [
+      "en_core_web_lg",
+      "en_core_web_sm"
+    ],
+    "preferred": "en_core_web_lg",
+    "fallback": "en_core_web_sm",
+    "installed": true
+  },
+  "transformers": {
+    "models": [
+      "bert-base-uncased",
+      "facebook/bart-large-mnli"
+    ],
+    "installed": true
+  },
+  "sentence_transformers": {
+    "models": [
+      "all-MiniLM-L6-v2"
+    ],
+    "installed": true
+  }
+}
