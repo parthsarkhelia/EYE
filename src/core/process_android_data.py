@@ -5,11 +5,14 @@ from typing import Dict, Optional
 from datetime import datetime
 from src.utils.utils import create_response,do_http_request
 import requests
+import logging
+
 from src import utils    
 from src.secrets import secrets
 
 KEY_SUCCESS = "success"
 KEY_STATUS = "status"
+from src.utils.parallel import get_alternate_service_response,endpoints_to_call,get_risk_service_response
 
 async def bureau_eye_submit(
     context,
@@ -33,7 +36,14 @@ async def bureau_eye_submit(
         logging.info("succesfully fetched device insights!") 
         name, phone_number, email = await get_user_details_from_userId(userId)
         logging.info("fetched user details from userId",name,phone_number,email)
-          
+        sevice_response=get_alternate_service_response(endpoints_to_call)
+        logging.info({"Service Resposne":sevice_response})
+
+        risk_model_response=get_risk_service_response(service_response=sevice_response)
+        if risk_model_response==None:
+            raise Exception("Didn't get response from risk model")
+        
+        
     except Exception as e:
         return create_response(
             status="error",
