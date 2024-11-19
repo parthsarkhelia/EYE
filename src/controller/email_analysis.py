@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 from src.core import mongo
 from src.lib.email_classifier import EmailAnalyzer

@@ -11,7 +11,9 @@ router = APIRouter(redirect_slashes=False)
 @router.post("/analyze")
 @api("Analyze Emails")
 async def analyze_emails(
-    request: Request, response: Response, analysis_request: EmailAnalysisRequest
+    request: Request,
+    response: Response,
+    analysis_request: EmailAnalysisRequest,
 ):
     context = request.state.context
     email_analyzer = request.app.state.email_analyzer
@@ -46,7 +48,11 @@ async def get_categories(request: Request, response: Response):
 
 @router.post("/refresh-analysis")
 @api("Refresh Email Analysis")
-async def refresh_analysis(request: Request, response: Response, username: str):
+async def refresh_analysis(
+    request: Request,
+    response: Response,
+    username: str,
+):
     context = request.state.context
     email_analyzer = request.app.state.email_analyzer
 
