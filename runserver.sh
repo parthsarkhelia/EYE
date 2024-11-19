@@ -1,9 +1,9 @@
 #!/bin/bash
 
 export PYTHONPATH=/app
-export PORT=5000
+export PORT=3000
 
-pip install --no-cache-dir --upgrade -r /app/requirements.txt
+pip3 install --no-cache-dir --upgrade -r /app/requirements.txt
 
 if [ "$ENV" == "local" ] || [ "$ENV" == "dev" ]
 then

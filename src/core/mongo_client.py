@@ -12,14 +12,14 @@ class MongoConnect:
     def db_connect(self):
         try:
             db = self.db[secrets["db_name"]]
-            self.base_collection = db[secrets["base_collection"]]
+            self.user_collection = db[secrets["user_collection"]]
             self.social_auth_collection = db[secrets["social_auth_collection"]]
         except ServerSelectionTimeoutError:
             pass
 
     async def close(self):
-        if self.base_collection:
-            self.base_collection.close()
+        if self.user_collection:
+            self.user_collection.close()
         if self.social_auth_collection:
             self.social_auth_collection.close()
 

@@ -32,7 +32,7 @@ def get_secrets():
         # Database Variable
         "mongodb_conn_string": os.environ.get("MONGODB_CONN_STRING"),
         "db_name": os.environ.get("DB_NAME"),
-        "base_collection": os.environ.get("BASE_COLLECTION"),
+        "user_collection": os.environ.get("USER_COLLECTION"),
         "social_auth_collection": os.environ.get("SOCIAL_AUTH_COLLECTION"),
         # Social Auths Variable
         "social_auth_redirection_url": os.environ.get("SOCIAL_AUTH_REDIRECTION_URL"),
