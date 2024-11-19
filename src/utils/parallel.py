@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 from typing import List, Dict
 import time
+import requests
 
 
 async def make_post_request(
@@ -61,7 +62,7 @@ async def call_apis_parallel(endpoints: List[Dict]) -> Dict:
         return merged_response
 
 
-def merged_resposne(endpoints: List[Dict]):
+def get_alternate_service_response(endpoints: List[Dict]):
     return asyncio.run(call_apis_parallel(endpoints))
 
 
@@ -135,3 +136,100 @@ endpoints_to_call = [
         },
     },
 ]
+
+
+def get_risk_service_response(service_response):
+
+    email_intelligence_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-intelligence",{})
+    email_name_attributes_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-name-attributes",{})
+    email_social_advance_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-social-advance",{})
+    phone_name_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/phone-name",{})
+    phone_name_attributes_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/phone-name-attributes",{})
+    phone_social_advance_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/phone-social-advance",{})
+    phone_network_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/phone-network",{})
+
+    url = "https://api.overwatch.stg.bureau.id/v2/services/riskmodel"
+    whatsapp_business_presence_final=-1
+    whatsapp_business_presence=phone_social_advance_service.get("isWABusiness","Error")
+
+    if whatsapp_business_presence=="Account Found":
+        whatsapp_business_presence_final="1"
+    elif whatsapp_business_presence=="Account Not Found":
+        whatsapp_business_presence_final="0"
+
+    payload = json.dumps({
+    "name": "Dhruv Solanki",
+    "phone": "917506037403",
+    "email": "jain.nit@gmail.com",
+
+    "currentNetworkName": phone_network_service.get("currentNetworkName",""),
+    "currentNetworkBillingType":phone_network_service.get("numberBillingType",""),
+    "isPhoneReachable": phone_network_service.get("isPhoneReachable",""),
+    "ported": phone_network_service.get("numberHasPortingHistory",""),
+    "roaming": phone_network_service.get("roaming",""),
+
+    "emailFinalRecommendation":email_intelligence_service.get("emailFinalRecommendation",""),
+    "domainExists": email_intelligence_service.get("domainExists",""),
+    "emailExists": email_intelligence_service.get("emailExists",""),
+
+    "phoneWhatsApp": phone_social_advance_service.get("whatsapp","Error"),
+    "phoneInstagram": phone_social_advance_service.get("instagram","Error"),
+    "phoneAmazon": phone_social_advance_service.get("amazon","Error"),
+    "phonePaytm":  phone_social_advance_service.get("paytm","Error"),
+    "phoneFlipkart":  phone_social_advance_service.get("flipkart","Error"),
+    "phoneIndiamart": phone_social_advance_service.get("indiamart","Error"),
+    "phoneJeevansaathi": phone_social_advance_service.get("jeevansaathi","Error"),
+    "phoneJiomart":  phone_social_advance_service.get("jiomart","Error"),
+    "phoneShaadi":  phone_social_advance_service.get("shaadi","Error"),
+    "phoneSwiggy": phone_social_advance_service.get("swiggy","Error"),
+    "phoneToi": phone_social_advance_service.get("toi","Error"),
+    "phoneYatra": phone_social_advance_service.get("yatra","Error"),
+    "phoneZoho": phone_social_advance_service.get("zoho","Error"),
+    "phoneWhatsAppBusiness": whatsapp_business_presence_final,
+
+    "emailInstagram": email_social_advance_service.get("instagram","Error"),
+    "emailAmazon": email_social_advance_service.get("amazon","Error"),
+    "emailPaytm": email_social_advance_service.get("paytm","Error"),
+    "emailFlipkart":email_social_advance_service.get("flipkart","Error"),
+    "emailHousing": email_social_advance_service.get("housing","Error"),
+    "emailJeevansaathi": email_social_advance_service.get("jeevansaathi","Error"),
+    "emailShaadi": email_social_advance_service.get("amazon","Error"),
+    "emailToi": email_social_advance_service.get("toi","Error"),
+    "emailYatra": email_social_advance_service.get("yatra","Error"),
+    "emailZoho": email_social_advance_service.get("zoho","Error"),
+
+    "emailDigitalAge": email_name_attributes_service.get("digitalage",""),
+    "emailNameMatchScore": email_name_attributes_service.get("nameMatchScore",""),
+    "emailUNRScore": email_name_attributes_service.get("unrScore",""),
+
+    "phoneDigitalAge": phone_name_attributes_service.get("digitalage",""),
+    "phoneNameMatchScore": phone_name_attributes_service.get("nameMatchScore",""),
+    "phoneUNRScore": phone_name_attributes_service.get("unrScore",""),
+
+    "riskModels": [
+        "alternate_risk-model_config_1",
+        "mule_risk-model_config_2",
+        "onboarding_risk-model_config_23"
+    ]
+    })
+
+    print(payload,)
+    headers = {
+    'Authorization': 'Basic ZTBhMmNhYTYtYzFjMy00YTI0LjTkzMzktNzc3YzE5MmI3ZWJiOjVkMGM0NDg3LTY4NTItNGRkNi05YWZmLTZkNmEyNWRkMjBkOQ==',
+    'Content-Type': 'application/json'
+    }
+
+    response = requests.post(url, headers=headers, data=payload)
+    try:
+        response = requests.post(url, headers=headers, data=payload)
+        response.raise_for_status()
+        print(response.json())
+        return response.json()
+    except requests.exceptions.HTTPError as http_err:
+        print(f"HTTP error occurred: {http_err}")
+        return None
+    except requests.exceptions.RequestException as err:
+        print(f"Error occurred: {err}")
+        return None
+
+
