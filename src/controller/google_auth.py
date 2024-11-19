@@ -24,7 +24,7 @@ def get_google_auth_url(context) -> (int, dict):
             "client_id": CLIENT_ID,
             "redirect_uri": REDIRECT_URI,
             "response_type": "code",
-            "scope": "openid%20email%20profile",
+            "scope": "openid%20email%20profile https://www.googleapis.com/auth/gmail.readonly",
         }
 
         auth_url = f"{AUTHENTICATION_URL}?" + "&".join(
