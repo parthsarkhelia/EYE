@@ -79,7 +79,6 @@ async def exception_handler(request: Request, exc: Exception):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize models when starting the server"""
     logging.info({"action": "server_startup", "status": "initializing_models"})
     try:
         setup = ModelSetup()

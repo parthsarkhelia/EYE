@@ -35,7 +35,6 @@ class ModelSetup:
         self.state_file = self.models_dir / "installation_state.json"
 
     def check_pip_packages(self) -> bool:
-        """Check if required packages are installed"""
         logging.info({"action": "checking_pip_packages"})
 
         required_packages = [
@@ -89,7 +88,6 @@ class ModelSetup:
             return False
 
     def install_pip_packages(self):
-        """Install required pip packages"""
         logging.info({"action": "installing_pip_packages"})
 
         try:
@@ -113,7 +111,6 @@ class ModelSetup:
             raise
 
     def check_spacy_model(self, model_name: str) -> bool:
-        """Check if a specific spaCy model is installed"""
         try:
             import spacy
 
@@ -123,7 +120,6 @@ class ModelSetup:
             return False
 
     def install_spacy_models(self):
-        """Install spaCy models"""
         logging.info({"action": "installing_spacy_models"})
 
         try:
@@ -170,7 +166,6 @@ class ModelSetup:
             raise
 
     def download_transformer_models(self):
-        """Download transformer models"""
         logging.info({"action": "downloading_transformer_models"})
 
         try:
@@ -199,7 +194,6 @@ class ModelSetup:
             raise
 
     def download_sentence_transformer_models(self):
-        """Download sentence transformer models"""
         logging.info({"action": "downloading_sentence_transformer_models"})
 
         try:
@@ -230,7 +224,6 @@ class ModelSetup:
             raise
 
     def save_state(self):
-        """Save installation state to file"""
         try:
             with open(self.state_file, "w") as f:
                 json.dump(self.models_config, f, indent=2)
@@ -247,7 +240,6 @@ class ModelSetup:
             )
 
     def load_state(self) -> bool:
-        """Load installation state from file"""
         try:
             if self.state_file.exists():
                 with open(self.state_file, "r") as f:
@@ -267,7 +259,6 @@ class ModelSetup:
         return False
 
     def setup(self):
-        """Main setup function to install all required models"""
         logging.info({"action": "starting_model_setup"})
 
         try:
