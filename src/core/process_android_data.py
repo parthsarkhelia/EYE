@@ -1,37 +1,140 @@
+from http import HTTPStatus
+import json
+import logging
 from typing import Dict, Optional
 from datetime import datetime
-
+from src.utils.utils import create_response,do_http_request
+import requests
 from src import utils    
+from src.secrets import secrets
+
+KEY_SUCCESS = "success"
+KEY_STATUS = "status"
 
 async def bureau_eye_submit(
-    self,
-    decrypted_device_data: any,
-    encrypted_device_data: str,
-    api_version: str,
+    context,
+    device_data,
     auth_credential: str
 ) -> Dict:
     try:
         """Process Android device data and perform necessary operations"""
-        user_application_data = decrypted_device_data["packageManagerInfo_"]["userApplicationList_"]
-        device_fingerprint_response = get_device_insights()
+        user_application_data = device_data["packageManagerInfo_"]["userApplicationList_"]
+        userId = device_data["userId_"]
+        device_fingerprint_response = await get_device_insights(device_data=device_data,auth_credential=auth_credential)
         
+        if device_fingerprint_response[KEY_STATUS] != KEY_SUCCESS:
+            return create_response(
+                status="error",
+                error="Internal Server Error",
+                message=f"Failed to fetch device insights: {device_fingerprint_response["message"]}",
+                response=device_fingerprint_response
+            )
+        
+        logging.info("succesfully fetched device insights!") 
+        name, phone_number, email = await get_user_details_from_userId(userId)
+        logging.info("fetched user details from userId",name,phone_number,email)
+          
     except Exception as e:
-        return utils.create_response(
+        return create_response(
             status="error",
             error="Internal Server Error",
             message=str(e)
         )
         
-def get_device_insights(encrypted_device_data: any, api_version: str) -> Dict:
+async def get_device_insights(
+    device_data: dict, 
+    auth_credential: str
+) -> Dict:
     try: 
-        print("unimplemented")
-    except Exception as e:
-        return utils.create_response(
-            status="error",
-            error="Internal Server Error",
-            message=str(e)
+        url = "https://api.stg.bureau.id/v1/deviceService/deviceData/android"
+        user_ip = device_data["networkInfo_"]["iPV4_"]
+        session_id = device_data["sessionId_"]
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Bureau-Auth-Credential-ID': auth_credential,
+            'X-Bureau-Client-Ip' : user_ip
+        }
+        device_response = do_http_request(
+            url=url, 
+            headers=headers, 
+            request_body=device_data,
+            request_type="POST"
         )
         
+        if device_response[KEY_STATUS] == KEY_SUCCESS:
+            get_url = "https://api.stg.bureau.id/v1/suppliers/device-fingerprint"
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': secrets['authorization_key'],
+            }
+            request_body = {
+                "sessionId": session_id,
+            }
+            
+            device_insights_response = do_http_request(
+                url=get_url, 
+                headers=headers, 
+                request_body=request_body,
+                request_type="POST"
+            )
+            if device_insights_response[KEY_STATUS] == KEY_SUCCESS:
+                return create_response(
+                    status="success",
+                    message="Succesfully done post!",
+                    response=device_insights_response
+                )
+            else:
+                logging.error({
+                    "message": "failed to get device session insights",
+                    "error": device_insights_response["error"],
+                    "description": device_insights_response["message"],
+                })
+                return create_response(
+                    status="error",
+                    message="failed to get device insights!",
+                    error="Internal Server Error",
+                    response=device_insights_response
+                )
+        else:
+            logging.error("failed to post device data",device_response)
+            return create_response(
+                status="error",
+                message=f"failed to submit device data: {device_response['message']}",
+                error="Internal Server Error",
+                response=device_response
+            )
+    except Exception as e:
+        logging.exception("Exception: failed to post device data",str(e))
+        return create_response(
+            status="error",
+            error="Internal Server Error",
+            message=f"Got Exception: {str(e)}"
+        )
+   
+from typing import Tuple, Optional
+
+async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
+    try:
+        # Split string by underscore
+        components = userId.split('_')
+        
+        if len(components) != 3:
+            raise ValueError("Invalid userId format. Expected format: name_phoneNumber_email")
+            
+        name, phone_number, email = components
+        
+        # Basic validation
+        if not all([name, phone_number, email]):
+            raise ValueError("All components (name, phone, email) must be non-empty")
+            
+        if '@' not in email:
+            raise ValueError("Invalid email format")
+            
+        return name, phone_number, email
+        
+    except Exception as e:
+        raise ValueError(f"Failed to parse userId: {str(e)}")       
      
     
 

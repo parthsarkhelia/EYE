@@ -1,32 +1,22 @@
 import json
 from src.secrets import secrets
-from structs import structs
 from src.utils import utils
-from src.core import decrypt_device_data,process_android_data
+from src.core import process_android_data
 
 
-async def bureau_eye_submit(
+async def handle_bureau_eye_submit(
     context,
-    device_data: structs.SubmitRequestBody,
-    api_version: str,
+    device_data: dict,
     auth_credential: str
 ) -> dict:
     try:
-        validate_encrypted_data(device_data)
-        decryptedPayload = decrypt_device_data.decrypt_request_body(api_version,device_data,secrets["aes256_key"],secrets["aes256_iv"], secrets["rsa_private_key"], auth_credential)
-        
-        # Convert bytes to string and parse JSON
-        decrypted_string = decryptedPayload.decode('utf-8')
-        decrypted_payload = json.loads(decrypted_string)
-
         # Validate device data
-        validate_device_data(decrypted_payload)
-    
+        validate_device_data(device_data)
+
         # Process data through service
-        result = await process_android_data(
-            decrypted_device_data=decrypted_payload,
-            encrypted_device_data=device_data,
-            api_version=api_version,
+        result = await process_android_data.bureau_eye_submit(
+            context=context,
+            device_data=device_data,
             auth_credential=auth_credential
         )
         
@@ -34,7 +24,8 @@ async def bureau_eye_submit(
         return utils.create_response(
             status="success",
             session_id=device_data.sessionId_,
-            data=result
+            response=result,
+            message="success"
         )
         
     except ValueError as e:
@@ -50,16 +41,8 @@ async def bureau_eye_submit(
             message=str(e)
         )
 
-def validate_device_data(device_data: any):
+def validate_device_data(device_data):
     if not device_data["sessionId_"]:
         raise ValueError("Session ID is required")
     if not device_data["userId_"]:
-        raise ValueError("Session ID is required")
-    
-def validate_encrypted_data(device_data: structs.SubmitRequestBody):
-    if len(device_data.payload)==0:
-        raise ValueError("payload is required")
-    if len(device_data.aes256_iv)==0:
-        raise ValueError("encryptionIV is required")
-    if len(device_data.aes256_key)==0:
-        raise ValueError("encryptionKey is required")
+        raise ValueError("User ID is required")

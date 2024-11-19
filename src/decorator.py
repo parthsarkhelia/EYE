@@ -21,7 +21,6 @@ def api(description=""):
                     **context,
                     "event": "API Request received",
                     "content": content_type,
-                    "request_body": request_body,
                 }
             )
 
@@ -42,7 +41,6 @@ def api(description=""):
                 {
                     **context,
                     "event": "API Request completed",
-                    "response_body": resp,
                     "status_code": response.status_code,
                 }
             )

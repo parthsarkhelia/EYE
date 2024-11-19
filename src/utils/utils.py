@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime, timedelta
 import uuid
-
+from typing import Dict
+import requests
+import json
+from http import HTTPStatus
 import jwt
-
 from src.secrets import secrets
 
 
@@ -21,10 +24,9 @@ def generate_token(payload: dict, expiration_hours: int = 24) -> str:
     
 def create_response(
     status: str,
-    session_id: str,
-    data: any,
-    error: str ,
-    message: str
+    message: str,
+    error: str=None,
+    response=None,
 ) -> dict:
     """Create a standardized API response"""
     response = {
@@ -33,11 +35,8 @@ def create_response(
         "requestId": str(uuid.uuid4())
     }
 
-    if session_id:
-        response["sessionId"] = session_id
-
-    if data is not None:
-        response["data"] = data
+    if response is not None:
+        response["response"] = response
 
     if error:
         response["error"] = error
@@ -46,3 +45,70 @@ def create_response(
         response["message"] = message
 
     return response
+
+def do_http_request(
+    url: str, 
+    headers: Dict[str, str], 
+    request_body: Dict,
+    request_type: str
+) -> Dict:
+    try:
+        payload = json.dumps(request_body)
+        response = requests.request(request_type, url, headers=headers, data=payload)
+        
+        if response.status_code == HTTPStatus.OK:
+            return create_response(
+                status="success",
+                message="success",
+                response=response,
+            ) 
+        elif response.status_code == HTTPStatus.UNAUTHORIZED:
+            return create_response(
+                status="error",
+                error="Unauthorized",
+                message="Invalid authentication credentials",
+                response=response
+            )
+            
+        elif response.status_code == HTTPStatus.BAD_REQUEST:
+            return create_response(
+                status="error",
+                error="Bad Request",
+                message=response.json().get('message', 'Invalid request parameters'),
+                response=response
+            )
+        elif response.status_code == HTTPStatus.CONFLICT:
+            return create_response(
+                status="error",
+                error="Conflict",
+                message=response.json().get('message', 'SessionId Already Present!'),
+                response=response
+            )
+        elif response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+            return create_response(
+                status="error",
+                error="Unprocessable Entity",
+                message=response.json().get('message', 'SessionId Not Found!'),
+                response=response
+            )
+        else:
+            return create_response(
+                status="error",
+                error=f"API Error: Status Code - {response.status_code}",
+                message=f"Service returned message: {response.json()}",
+                response=response
+            )           
+    except requests.exceptions.RequestException as e:
+        return {
+            "status": "error",
+            "error": "Request Error",
+            "response": response
+        }
+    
+    except Exception as e:
+        logging.exception({"message": "issue faced during http"})
+        return {
+            "status": "error",
+            "error": "Internal Server Error", 
+            "response": response
+        }
