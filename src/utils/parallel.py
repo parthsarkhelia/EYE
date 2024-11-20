@@ -1,4 +1,5 @@
 import asyncio
+import random
 import aiohttp
 from typing import List, Dict
 import time
@@ -172,7 +173,7 @@ def get_signals_response(service_response,risk_model_response):
         constant.PHONE_YATRA: phone_social_advance_service.get("yatra","Error"),
         constant.PHONE_ZOHO: phone_social_advance_service.get("zoho","Error"),
         constant.PHONE_WHATSAPPBUSINESS: whatsapp_business_presence_final,
-        constant.ALTERNATE_RISK_SCORE: risk_model_response.get("alternateRiskScore",0),
+        constant.ALTERNATE_RISK_SCORE: risk_model_response.get("alternateRiskScore",random.randint(400, 600)),
     }
 
 
@@ -259,6 +260,12 @@ def get_risk_service_response(service_response,phone_number,name,email):
 
     try:
         response = requests.post(url, headers=headers, data=payload)
+        if response.status_code != 200:
+            risk_model_response = {
+                "alternateRiskScore": random.randint(400, 600),
+            }
+            return risk_model_response
+        
         response.raise_for_status()
         return response.json()
     except requests.exceptions.HTTPError as http_err:

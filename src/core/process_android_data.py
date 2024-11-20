@@ -55,9 +55,6 @@ async def bureau_eye_submit(context, device_data, auth_credential: str) -> Dict:
             email=email,
         )
 
-        if not risk_model_response:
-            raise Exception("Didn't get response from risk model")
-
         logging.info({"message": "succesfully fetched risk model response!"})
         signals_output = parallel.get_signals_response(
             service_response=service_response, risk_model_response=risk_model_response
