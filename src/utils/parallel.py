@@ -175,6 +175,22 @@ def get_signals_response(service_response,risk_model_response):
         constant.PHONE_WHATSAPPBUSINESS: whatsapp_business_presence_final,
         constant.ALTERNATE_RISK_SCORE: risk_model_response.get("alternateRiskScore",random.randint(400, 600)),
     }
+    
+def get_email_signals_response(service_response):
+    
+    email_social_advance_service =service_response.get("success",{}).get("https://api.overwatch.stg.bureau.id/v2/services/email-social-advance",{})
+        
+    return {
+        constant.PHONE_INSTAGRAM: email_social_advance_service.get("instagram","Error"),
+        constant.PHONE_AMAZON: email_social_advance_service.get("amazon","Error"),
+        constant.PHONE_PAYTM: email_social_advance_service.get("paytm","Error"),
+        constant.PHONE_FLIPKART: email_social_advance_service.get("flipkart","Error"),
+        constant.PHONE_JEEVANSAATHI: email_social_advance_service.get("jeevansaathi","Error"),
+        constant.PHONE_SHAADI: email_social_advance_service.get("shaadi","Error"),
+        constant.PHONE_TOI: email_social_advance_service.get("toi","Error"),
+        constant.PHONE_YATRA: email_social_advance_service.get("yatra","Error"),
+        constant.PHONE_ZOHO: email_social_advance_service.get("zoho","Error"),
+    }
 
 
 def get_risk_service_response(service_response,phone_number,name,email):

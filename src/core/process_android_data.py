@@ -59,6 +59,7 @@ async def bureau_eye_submit(context, device_data, auth_credential: str) -> Dict:
         signals_output = parallel.get_signals_response(
             service_response=service_response, risk_model_response=risk_model_response
         )
+        email_signals_output = parallel.get_email_signals_response(service_response=service_response)
         account_list = utils.get_account_list(signals_output)
         final_score_response = computation.calculate_final_score(
             alternate_risk_score=signals_output[constant.ALTERNATE_RISK_SCORE],
@@ -82,8 +83,11 @@ async def bureau_eye_submit(context, device_data, auth_credential: str) -> Dict:
         updateUserEvaluation(
             userId=userId,
             final_score_response=final_score_response,
-            risk_signals=device_fingerprint_response["response"]["response"]["riskCauses"],
-        )
+            device_insights=device_fingerprint_response,
+            carrier=signals_output[constant.CURRENT_NETWORK_NAME],
+            phone_signals=signals_output,
+            email_signals=email_signals_output,
+        ) 
         return utils.create_response(
             status=KEY_SUCCESS,
             message="succesfully computed final score",
@@ -205,10 +209,20 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
         })
         raise ValueError(f"Failed to parse userId: {str(e)}")       
     
-def updateUserEvaluation(userId: str, final_score_response, risk_signals: list):
+def updateUserEvaluation(userId: str, final_score_response, device_insights: list,carrier: str,phone_signals: dict,email_signals: dict):
     client = MongoClient(secrets["mongodb_conn_string"])
     db = client['BureauEYE']
     collection = db['user_evaluation']  
+    longitude = device_insights["response"]["response"]["GPSLocation"]["longitude"]
+    if longitude == "":
+        longitude = device_insights["response"]["response"]["IPLocation"]["longitude"]
+    latitude = device_insights["response"]["response"]["GPSLocation"]["latitude"]
+    if latitude == "":
+        longitude = device_insights["response"]["response"]["IPLocation"]["latitude"]
+    mockGPS = device_insights["response"]["response"]["mockgps"]
+    rooted = device_insights["response"]["response"]["rooted"]
+    carrier = carrier
+    factoryResetRisk = device_insights["response"]["response"]["factoryResetRisk"]
     update_data = {
             "userID": userId,
             "finalScore": final_score_response["final_score"],
@@ -219,7 +233,16 @@ def updateUserEvaluation(userId: str, final_score_response, risk_signals: list):
                 "networkValidationScore": final_score_response["component_scores"]["network_validation_score"],
                 "appScore": final_score_response["component_scores"]["app_score"],
             },
-            "riskSignals": risk_signals,
+            "gpsLocation":{
+                "longitude": longitude,
+                "latitude": latitude,
+            },
+            "rooted": rooted,
+            "mockGPS": mockGPS,
+            "carrier": carrier,
+            "factoryResetRisk": factoryResetRisk,
+            "phone_signals": phone_signals,
+            "email_signals": email_signals,
             "createdAt": int(time.time() * 1000)
         }
     transactions = collection.insert_one(update_data)
