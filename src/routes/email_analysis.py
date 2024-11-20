@@ -1,5 +1,7 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
+
 from src.controller import email_analysis
 from src.decorator import api
 from src.models.email_analysis import (
@@ -116,6 +118,7 @@ async def delete_analysis(
     response.status_code = status_code
     return resp
 
+
 @router.get("/get-all-details")
 @api("Get all details")
 async def get_all_details(request: Request, response: Response):
@@ -127,4 +130,5 @@ async def get_all_details(request: Request, response: Response):
         status_code = 404
         resp = {"message": constant.RECORD_NOT_FOUND}
     response.status_code = status_code
+    response.headers["Content-Type"] = "application/json"
     return resp
