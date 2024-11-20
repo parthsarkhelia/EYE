@@ -1,19 +1,23 @@
-import logging
-from datetime import datetime, timedelta
-import uuid
-from typing import Dict
-import requests
 import json
+import logging
+import uuid
+from datetime import datetime, timedelta
 from http import HTTPStatus
+from typing import Dict
+
 import jwt
+import requests
+
 from src.secrets import secrets
 from src.utils import constant
+
 
 def get_package_names(user_application_list):
     package_names = []
     for app in user_application_list:
-        package_names.append(app['packageName_'])
+        package_names.append(app["packageName_"])
     return package_names
+
 
 def get_account_list(signals_output):
     account_list = []
@@ -45,10 +49,9 @@ def get_account_list(signals_output):
         account_list.append(constant.PHONE_ZOHO)
     if signals_output[constant.PHONE_WHATSAPPBUSINESS] == "Account Found":
         account_list.append(constant.PHONE_WHATSAPPBUSINESS)
-        
+
     return account_list
 
-    
 
 def generate_token(payload: dict, expiration_hours: int = 24) -> str:
     """
@@ -62,22 +65,23 @@ def generate_token(payload: dict, expiration_hours: int = 24) -> str:
     return jwt.encode(
         payload, secrets["jwt_secret_key"], algorithm=secrets["jwt_encode_algorithm"]
     )
-    
+
+
 def create_response(
     status: str,
     message: str,
-    error: str=None,
-    response=None,
+    error: str = None,
+    resp=None,
 ) -> dict:
     """Create a standardized API response"""
     response = {
         "status": status,
         "timestamp": datetime.utcnow().isoformat(),
-        "requestId": str(uuid.uuid4())
+        "requestId": str(uuid.uuid4()),
     }
 
-    if response is not None:
-        response["response"] = response
+    if resp is not None:
+        response["response"] = resp
 
     if error:
         response["error"] = error
@@ -87,68 +91,52 @@ def create_response(
 
     return response
 
+
 def do_http_request(
-    url: str, 
-    headers: Dict[str, str], 
-    request_body: Dict,
-    request_type: str
+    url: str, headers: Dict[str, str], request_body: Dict, request_type: str
 ) -> Dict:
     try:
         payload = json.dumps(request_body)
         response = requests.request(request_type, url, headers=headers, data=payload)
-        
-        if response.status_code == HTTPStatus.OK:
+        if response.status_code != HTTPStatus.OK:
+            error_response = json.loads(response.content.decode("utf-8"))
+            error = "API Error"
+            message = "Internal Server Error"
+            if response.status_code == HTTPStatus.UNAUTHORIZED:
+                error = "Unauthorized"
+                message = "Invalid authentication credentials"
+            elif response.status_code == HTTPStatus.BAD_REQUEST:
+                error = "Bad Request"
+                message = "Invalid request parameters"
+            elif response.status_code == HTTPStatus.CONFLICT:
+                error = "Conflict"
+                message = "SessionId Already Present!"
+            elif response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+                error = "Unprocessable Entity"
+                message = "SessionId Not Found!"
+
+            return create_response(
+                status="error",
+                error=error,
+                message=message,
+                resp=error_response,
+            )
+        else:
+            resp = None
+            if response.text:
+                resp = json.loads(response.text)
             return create_response(
                 status="success",
                 message="success",
-                response=response,
-            ) 
-        elif response.status_code == HTTPStatus.UNAUTHORIZED:
-            return create_response(
-                status="error",
-                error="Unauthorized",
-                message="Invalid authentication credentials",
-                response=response
+                resp=resp,
             )
-            
-        elif response.status_code == HTTPStatus.BAD_REQUEST:
-            return create_response(
-                status="error",
-                error="Bad Request",
-                message=response.json().get('message', 'Invalid request parameters'),
-                response=response
-            )
-        elif response.status_code == HTTPStatus.CONFLICT:
-            return create_response(
-                status="error",
-                error="Conflict",
-                message=response.json().get('message', 'SessionId Already Present!'),
-                response=response
-            )
-        elif response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-            return create_response(
-                status="error",
-                error="Unprocessable Entity",
-                message=response.json().get('message', 'SessionId Not Found!'),
-                response=response
-            )
-        else:
-            return create_response(
-                status="error",
-                error=f"API Error: Status Code - {response.status_code}",
-                message=f"Service returned message: {response.json()}",
-                response=response
-            )           
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.RequestException:
+        logging.exception({"message": "panic with request exception"})
         return {
             "status": "error",
             "error": "Request Error",
-            "response": response
+            "message": "internal error",
         }
-    
     except Exception as e:
         logging.exception({"message": "issue faced during http"})
-        return {
-            "status": "error",
-            "error": "Internal Server Error", 
-        }
+        return {"status": "error", "error": str(e), "message": "internal server error"}
