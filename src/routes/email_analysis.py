@@ -7,6 +7,7 @@ from src.models.email_analysis import (
     PaginationParams,
     ResumeAnalysisRequest,
     StoredEmailAnalysisRequest,
+    get_all_details,
 )
 
 router = APIRouter(redirect_slashes=False)
@@ -112,5 +113,16 @@ async def delete_analysis(
 ):
     context = request.state.context
     status_code, resp = await email_analysis.delete_analysis(context, analysis_id)
+    response.status_code = status_code
+    return resp
+
+@router.get("/get-all-details")
+@api("Get all details")
+def get_all_details(request: Request, response: Response):
+    context = request.state.context
+    status_code, resp = email_analysis.get_all_details(context)
+    if not resp:
+        status_code = 404
+        resp = {"message": constant.RECORD_NOT_FOUND}
     response.status_code = status_code
     return resp

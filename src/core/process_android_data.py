@@ -174,6 +174,7 @@ async def get_device_insights(device_data: dict, auth_credential: str) -> Dict:
             message=f"Got Exception: {str(e)}",
         )
 
+from typing import Tuple, Optional
 
 async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
     try:
@@ -196,5 +197,9 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
         return name, phone_number, email
 
     except Exception as e:
-        logging.exception({"message": "failed to parse userId", "Exception": str(e)})
-        raise ValueError(f"Failed to parse userId: {str(e)}")
+        logging.exception({
+            "message": "failed to parse userId",
+            "Exception": str(e)
+        })
+        raise ValueError(f"Failed to parse userId: {str(e)}")       
+    

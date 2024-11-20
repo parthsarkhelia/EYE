@@ -2,14 +2,14 @@ import logging
 from datetime import datetime
 from enum import Enum
 from typing import Dict, Tuple
-
+from pymongo import MongoClient
 from bson import ObjectId
 
 from src.core import mongo
 from src.lib.email_classifier import EmailAnalyzer
 from src.models.email_analysis import EmailAnalysisRequest, StoredEmailAnalysisRequest
 from src.utils import constant
-
+from src.secrets import secrets
 
 class AnalysisState(Enum):
     INITIALIZED = "initialized"
@@ -332,3 +332,36 @@ async def delete_analysis(context: Dict, analysis_id: str) -> Tuple[int, Dict]:
             {**context, "action": "delete_analysis_failed", "error": str(e)}
         )
         return 500, {"message": constant.PROCESSING_ERROR}
+
+def fetchUserEvaluation(userId: str):
+    client = MongoClient(secrets["mongodb_conn_string"])
+    db = client['BureauEYE']
+    collection = db['user_evaluation']  
+    transactions = collection.find_one({"userID": userId})
+    client.close()
+    return transactions
+
+def fetchEmailAnalysisDetail(context):
+    client = MongoClient(secrets["mongodb_conn_string"])
+    db = client["BureauEYE"]
+    collection = db["user_evaluation"]
+    all_documents = collection.find()
+    result = list(all_documents)
+    client.close()
+    return result
+
+def get_all_details(context: Dict):
+    try:
+        response={}
+        emailAnalysisDetails = fetchEmailAnalysisDetail(context)
+        for emailAnalysisDetail in emailAnalysisDetails:
+            output = {}
+            output["emailAnalysis"]=emailAnalysisDetail
+            output["userEvaluation"]=fetchUserEvaluation(emailAnalysisDetail.get("user_id"))
+            response[emailAnalysisDetail.get("user_id")]=output
+        return response
+    except Exception as e:
+        logging.exception(
+            {**context, "action": "delete_analysis_failed", "error": str(e)}
+        )
+        return {"message": constant.PROCESSING_ERROR}
