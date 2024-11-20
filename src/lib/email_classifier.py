@@ -275,13 +275,6 @@ class EmailAnalyzer:
         ]
 
     def _is_credit_card_promotional(self, content: str) -> bool:
-        """
-        Check if the email content is promotional
-        Args:
-            content (str): Email content
-        Returns:
-            bool: True if promotional, False otherwise
-        """
         content_lower = content.lower()
 
         # Check for promotional keywords
@@ -304,13 +297,6 @@ class EmailAnalyzer:
         return False
 
     def _is_transaction_email(self, content: str) -> bool:
-        """
-        Check if the email is a transaction notification
-        Args:
-            content (str): Email content
-        Returns:
-            bool: True if transaction related, False otherwise
-        """
         transaction_indicators = [
             "transaction",
             "payment",
@@ -330,13 +316,6 @@ class EmailAnalyzer:
         return any(indicator in content_lower for indicator in transaction_indicators)
 
     def _is_payment_confirmation(self, content: str) -> bool:
-        """
-        Check if the email is a payment confirmation
-        Args:
-            content (str): Email content
-        Returns:
-            bool: True if payment confirmation, False otherwise
-        """
         content_lower = content.lower()
         return any(
             keyword.lower() in content_lower
@@ -346,14 +325,6 @@ class EmailAnalyzer:
     def _extract_pattern_match(
         self, content: str, patterns: List[str]
     ) -> Optional[str]:
-        """
-        Extract first match from a list of patterns
-        Args:
-            content (str): Text to search in
-            patterns (List[str]): List of regex patterns
-        Returns:
-            Optional[str]: First match found or None
-        """
         try:
             if isinstance(patterns, str):
                 patterns = [patterns]
@@ -368,14 +339,6 @@ class EmailAnalyzer:
             return None
 
     def _extract_pattern_matches(self, content: str, patterns: List[str]) -> List[str]:
-        """
-        Extract all matches from a list of patterns
-        Args:
-            content (str): Text to search in
-            patterns (List[str]): List of regex patterns
-        Returns:
-            List[str]: List of all matches found
-        """
         matches = []
         try:
             if isinstance(patterns, str):
@@ -397,15 +360,6 @@ class EmailAnalyzer:
     def _extract_pattern_with_index(
         self, content: str, patterns: List[str], group_index: int = 1
     ) -> Optional[str]:
-        """
-        Extract match from pattern with specific group index
-        Args:
-            content (str): Text to search in
-            patterns (List[str]): List of regex patterns
-            group_index (int): Index of the group to extract
-        Returns:
-            Optional[str]: Match found or None
-        """
         try:
             if isinstance(patterns, str):
                 patterns = [patterns]
@@ -422,14 +376,6 @@ class EmailAnalyzer:
     def _match_patterns(
         self, content: str, pattern_dict: Dict[str, List[str]]
     ) -> Dict[str, str]:
-        """
-        Match multiple patterns and return results as dictionary
-        Args:
-            content (str): Text to search in
-            pattern_dict (Dict[str, List[str]]): Dictionary of pattern lists
-        Returns:
-            Dict[str, str]: Dictionary of matches found
-        """
         results = {}
         try:
             for key, patterns in pattern_dict.items():
@@ -442,14 +388,6 @@ class EmailAnalyzer:
             return results
 
     def _extract_entities(self, content: str, entity_type: str) -> Optional[str]:
-        """
-        Extract specific entity type using appropriate patterns
-        Args:
-            content (str): Text to search in
-            entity_type (str): Type of entity to extract (card_number, amount, merchant, etc.)
-        Returns:
-            Optional[str]: Entity found or None
-        """
         try:
             # Get patterns based on entity type
             if entity_type == "card_number":
@@ -473,13 +411,6 @@ class EmailAnalyzer:
             return None
 
     def _clean_extracted_text(self, text: str) -> str:
-        """
-        Clean extracted text
-        Args:
-            text (str): Text to clean
-        Returns:
-            str: Cleaned text
-        """
         if not text:
             return ""
 
@@ -499,14 +430,6 @@ class EmailAnalyzer:
             return text
 
     def _validate_pattern_match(self, text: str, pattern_type: str) -> bool:
-        """
-        Validate if extracted text matches expected pattern
-        Args:
-            text (str): Text to validate
-            pattern_type (str): Type of pattern to validate against
-        Returns:
-            bool: True if valid, False otherwise
-        """
         try:
             if not text:
                 return False
@@ -530,14 +453,6 @@ class EmailAnalyzer:
             return False
 
     def _extract_all_matches(self, content: str, entity_type: str) -> List[str]:
-        """
-        Extract all matches of a specific entity type
-        Args:
-            content (str): Text to search in
-            entity_type (str): Type of entity to extract
-        Returns:
-            List[str]: List of all matches found
-        """
         try:
             patterns = []
 
@@ -557,7 +472,6 @@ class EmailAnalyzer:
             return []
 
     def _extract_amount(self, content: str, email_type: str) -> Optional[float]:
-        """Extract amount based on email type"""
         amount_patterns = self.patterns["transaction"]["amount_patterns"].get(
             email_type, self.patterns["transaction"]["amount_patterns"]["credit_card"]
         )
@@ -573,7 +487,6 @@ class EmailAnalyzer:
         return None
 
     def _extract_merchant(self, content: str, email_type: str) -> Optional[str]:
-        """Extract merchant based on email type"""
         merchant_patterns = self.patterns["transaction"]["merchant_patterns"].get(
             email_type, self.patterns["transaction"]["merchant_patterns"]["credit_card"]
         )
@@ -589,7 +502,6 @@ class EmailAnalyzer:
         return None
 
     def _get_transaction_type(self, content: str, sender: str) -> str:
-        """Determine transaction type from email content and sender"""
         sender_lower = sender.lower()
 
         # Check sender first
@@ -632,13 +544,6 @@ class EmailAnalyzer:
         return "unknown"
 
     def _identify_issuer(self, content: str) -> Optional[str]:
-        """
-        Identify credit card issuer from content or sender
-        Args:
-            content (str): Email content or sender
-        Returns:
-            Optional[str]: Identified issuer or None
-        """
         try:
             content_lower = content.lower()
 
@@ -680,13 +585,6 @@ class EmailAnalyzer:
             return None
 
     def _identify_card_network(self, content: str) -> Optional[str]:
-        """
-        Identify card network from content
-        Args:
-            content (str): Email content
-        Returns:
-            Optional[str]: Identified card network or None
-        """
         try:
             content_lower = content.lower()
 
@@ -747,13 +645,6 @@ class EmailAnalyzer:
             return None
 
     def _identify_card_type(self, content: str) -> Optional[str]:
-        """
-        Identify card type from content
-        Args:
-            content (str): Email content
-        Returns:
-            Optional[str]: Identified card type or None
-        """
         try:
             content_lower = content.lower()
 
@@ -793,13 +684,6 @@ class EmailAnalyzer:
             return None
 
     def get_card_details(self, content: str) -> Dict[str, Optional[str]]:
-        """
-        Get comprehensive card details from content
-        Args:
-            content (str): Email content
-        Returns:
-            Dict[str, Optional[str]]: Dictionary with card details
-        """
         try:
             details = {
                 "issuer": self._identify_issuer(content),
@@ -826,14 +710,6 @@ class EmailAnalyzer:
             return {"issuer": None, "network": None, "type": None, "number": None}
 
     def _identify_card_variant(self, content: str, issuer: str) -> Optional[str]:
-        """
-        Identify card variant based on issuer and content
-        Args:
-            content (str): Email content
-            issuer (str): Card issuer
-        Returns:
-            Optional[str]: Identified card variant or None
-        """
         try:
             content_lower = content.lower()
 
@@ -885,7 +761,6 @@ class EmailAnalyzer:
             return None
 
     async def analyze_emails(self, emails: List[Dict]) -> Dict:
-        """Main analysis function"""
         try:
             results = {
                 "credit_analysis": self.analyze_credit_cards(emails),
@@ -908,7 +783,6 @@ class EmailAnalyzer:
             raise Exception(f"Email analysis failed: {str(e)}")
 
     def analyze_credit_cards(self, emails: List[Dict]) -> Dict:
-        """Analyze credit card related emails"""
         credit_info = defaultdict(
             lambda: {
                 "card_number": None,
@@ -957,7 +831,6 @@ class EmailAnalyzer:
         return dict(credit_info)
 
     def analyze_spending(self, emails: List[Dict]) -> Dict:
-        """Analyze spending patterns"""
         spending_info = {
             "categories": defaultdict(
                 lambda: {
@@ -1007,7 +880,6 @@ class EmailAnalyzer:
     def _extract_transaction_details(
         self, content: str, date: str, sender: str
     ) -> Optional[Dict]:
-        """Extract transaction details based on email type"""
         try:
             # Determine transaction type
             transaction_type = self._get_transaction_type(content, sender)
@@ -1052,7 +924,6 @@ class EmailAnalyzer:
             return None
 
     def _categorize_merchant(self, merchant: str, transaction_type: str) -> str:
-        """Categorize merchant based on transaction type and merchant name"""
         if transaction_type != "unknown":
             return transaction_type
 
@@ -1069,7 +940,6 @@ class EmailAnalyzer:
         return "others"
 
     def _process_transaction(self, content: str, date: str, card_info: Dict):
-        """Process credit card transaction"""
         transaction_type = self._get_transaction_type(content, "")
         amount = self._extract_amount(content, transaction_type)
         merchant = self._extract_merchant(content, transaction_type)
@@ -1086,7 +956,6 @@ class EmailAnalyzer:
             card_info["total_spend"] += amount
 
     def _process_payment(self, content: str, date: str, card_info: Dict):
-        """Process credit card payment"""
         amount = self._extract_amount(content, "credit_card_payment")
         if amount:
             payment = {
@@ -1101,7 +970,6 @@ class EmailAnalyzer:
             card_info["payment_history"].append(payment)
 
     def _update_category_metrics(self, transaction: Dict, spending_info: Dict):
-        """Update category-specific metrics"""
         try:
             category = transaction.get("category", "others")
             amount = transaction.get("amount", 0.0)
@@ -1150,7 +1018,6 @@ class EmailAnalyzer:
             logging.error(f"Error updating category metrics: {str(e)}")
 
     def _update_overall_metrics(self, transaction: Dict, spending_info: Dict):
-        """Update overall spending metrics"""
         amount = transaction.get("amount", 0.0)
         date = transaction.get("date")
 
@@ -1173,7 +1040,6 @@ class EmailAnalyzer:
             overall["peak_spending_month"] = month_key
 
     def _calculate_spending_metrics(self, spending_info: Dict):
-        """Calculate final spending metrics"""
         try:
             total_spend = spending_info["overall"]["total_spend"]
 
@@ -1213,13 +1079,6 @@ class EmailAnalyzer:
             logging.error(f"Error calculating spending metrics: {str(e)}")
 
     def generate_insights(self, analysis_results: Dict) -> List[str]:
-        """
-        Generate insights from analysis results
-        Args:
-            analysis_results (Dict): Analysis results dictionary
-        Returns:
-            List[str]: List of insights
-        """
         try:
             insights = []
 
@@ -1244,13 +1103,6 @@ class EmailAnalyzer:
             return ["Unable to generate insights due to an error"]
 
     def _generate_credit_insights(self, credit_data: Dict) -> List[str]:
-        """
-        Generate insights from credit card analysis
-        Args:
-            credit_data (Dict): Credit card analysis data
-        Returns:
-            List[str]: List of credit card insights
-        """
         insights = []
         try:
             total_cards = len(credit_data)
@@ -1311,13 +1163,6 @@ class EmailAnalyzer:
             return ["Unable to generate credit card insights"]
 
     def _generate_spending_insights(self, spending_data: Dict) -> List[str]:
-        """
-        Generate insights from spending analysis
-        Args:
-            spending_data (Dict): Spending analysis data
-        Returns:
-            List[str]: List of spending insights
-        """
         insights = []
         try:
             categories = spending_data.get("categories", {})
@@ -1403,13 +1248,6 @@ class EmailAnalyzer:
             return ["Unable to generate spending insights"]
 
     def _generate_merchant_insights(self, transactions: List[Dict]) -> List[str]:
-        """
-        Generate insights about merchant patterns
-        Args:
-            transactions (List[Dict]): List of transactions
-        Returns:
-            List[str]: List of merchant insights
-        """
         insights = []
         try:
             if not transactions:

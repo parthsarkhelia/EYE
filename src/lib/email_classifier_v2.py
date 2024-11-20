@@ -171,13 +171,6 @@ class EmailClassifier:
         }
 
     def classify_email(self, email: Dict) -> Dict:
-        """
-        Classify email and extract relevant information
-        Args:
-            email (Dict): Email dictionary containing subject, content, sender, date
-        Returns:
-            Dict: Classified information including email type, extracted details
-        """
         try:
             content = f"{email.get('subject', '')} {email.get('content', '')}"
             sender = email.get("sender", "").lower()
@@ -201,9 +194,6 @@ class EmailClassifier:
             return {"error": str(e)}
 
     def _get_email_type(self, content: str, sender: str) -> str:
-        """
-        Determine email type based on content and sender
-        """
         # First check sender domain
         for category, companies in self.categories.items():
             if any(company in sender for company in companies):
@@ -238,9 +228,6 @@ class EmailClassifier:
         return "unknown"
 
     def _extract_info(self, content: str, email_type: str) -> Dict:
-        """
-        Extract information based on email type
-        """
         info = {}
 
         if email_type in ["credit_card_transaction", "credit_card_payment"]:
@@ -257,7 +244,6 @@ class EmailClassifier:
         return info
 
     def _extract_credit_card_info(self, content: str, email_type: str) -> Dict:
-        """Extract credit card related information"""
         info = {
             "card_number": self._extract_pattern_match(
                 content, self.patterns["credit_card"]["card_numbers"]
@@ -291,7 +277,6 @@ class EmailClassifier:
         return info
 
     def _extract_food_info(self, content: str) -> Dict:
-        """Extract food delivery related information"""
         return {
             "merchant": self._extract_pattern_match(
                 content, self.patterns["merchant"]["food_delivery"]
@@ -302,7 +287,6 @@ class EmailClassifier:
         }
 
     def _extract_transport_info(self, content: str) -> Dict:
-        """Extract transport related information"""
         return {
             "service": self._extract_pattern_match(
                 content, self.patterns["merchant"]["travel_transport"]
@@ -313,7 +297,6 @@ class EmailClassifier:
         }
 
     def _extract_shopping_info(self, content: str) -> Dict:
-        """Extract shopping related information"""
         return {
             "merchant": self._extract_pattern_match(
                 content, self.patterns["merchant"]["shopping"]
@@ -324,7 +307,6 @@ class EmailClassifier:
         }
 
     def _extract_financial_info(self, content: str) -> Dict:
-        """Extract financial transaction information"""
         return {
             "instrument": self._extract_pattern_match(
                 content, self.patterns["merchant"]["financial"]
@@ -337,14 +319,6 @@ class EmailClassifier:
     def _extract_pattern_match(
         self, content: str, patterns: List[str]
     ) -> Optional[str]:
-        """
-        Extract first match from a list of patterns
-        Args:
-            content (str): Text to search in
-            patterns (List[str]): List of regex patterns
-        Returns:
-            Optional[str]: First match found or None
-        """
         try:
             for pattern in patterns:
                 match = re.search(pattern, content, re.IGNORECASE)
@@ -356,13 +330,6 @@ class EmailClassifier:
             return None
 
     def process_emails(self, emails: List[Dict]) -> Dict:
-        """
-        Process a list of emails and provide categorized results
-        Args:
-            emails (List[Dict]): List of email dictionaries
-        Returns:
-            Dict: Processed results categorized by type
-        """
         results = {
             "credit_card_transactions": [],
             "credit_card_payments": [],
@@ -400,13 +367,6 @@ class EmailClassifier:
             return {"error": str(e)}
 
     def _generate_summary(self, results: Dict) -> Dict:
-        """
-        Generate summary statistics from processed results
-        Args:
-            results (Dict): Processed email results
-        Returns:
-            Dict: Summary statistics
-        """
         summary = {
             "categorized": {},
             "total_amounts": {},
@@ -467,13 +427,6 @@ class EmailClassifier:
             return {}
 
     def validate_extraction(self, email: Dict) -> bool:
-        """
-        Validate extracted information from email
-        Args:
-            email (Dict): Classified email with extracted information
-        Returns:
-            bool: True if extraction appears valid, False otherwise
-        """
         try:
             email_type = email.get("email_type")
             info = email.get("extracted_info", {})
@@ -496,14 +449,6 @@ class EmailClassifier:
             return False
 
     def _validate_credit_card_info(self, info: Dict, email_type: str) -> bool:
-        """
-        Validate credit card related information
-        Args:
-            info (Dict): Extracted information
-            email_type (str): Type of credit card email
-        Returns:
-            bool: True if valid, False otherwise
-        """
         if not info.get("card_number"):
             return False
 
