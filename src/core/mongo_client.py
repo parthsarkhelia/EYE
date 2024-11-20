@@ -17,7 +17,6 @@ class MongoConnect:
             self.email_analysis_collection = db[secrets["email_analysis_collection"]]
             self.raw_emails = db[secrets["raw_emails"]]
             self.processed_emails = db[secrets["processed_emails"]]
-            self.user_evaluation = db[secrets["user_evaluation_collection"]]
         except ServerSelectionTimeoutError:
             pass
 
@@ -32,8 +31,6 @@ class MongoConnect:
             self.raw_emails.close()
         if self.processed_emails:
             self.processed_emails.close()
-        if self.user_evaluation:
-            self.user_evaluation.close()
 
 
 mongo = MongoConnect()

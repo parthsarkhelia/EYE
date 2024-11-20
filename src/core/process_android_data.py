@@ -35,7 +35,6 @@ async def bureau_eye_submit(context, device_data, auth_credential: str) -> Dict:
         logging.info(
             {
                 "message": "succesfully fetched device insights!",
-                "response": device_fingerprint_response,
             }
         )
 
