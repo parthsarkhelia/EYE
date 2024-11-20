@@ -100,7 +100,7 @@ def calculate_final_score(
             "risk_score": alternate_risk_score,
             "device_risk_score": device_score,
             "input_validation_score": input_validation,
-            "network_validaiton_score": network_validation,
+            "network_validation_score": network_validation,
             "app_score": app_profile_score,
         },
     }

@@ -7,8 +7,8 @@ from src.models.email_analysis import (
     PaginationParams,
     ResumeAnalysisRequest,
     StoredEmailAnalysisRequest,
-    get_all_details,
 )
+from src.utils import constant
 
 router = APIRouter(redirect_slashes=False)
 

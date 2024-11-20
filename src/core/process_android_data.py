@@ -1,7 +1,8 @@
 import logging
 import uuid
+import time
 from typing import Dict, Tuple
-
+from pymongo import MongoClient
 from src.secrets import secrets
 from src.utils import computation, constant, parallel, utils
 
@@ -81,7 +82,11 @@ async def bureau_eye_submit(context, device_data, auth_credential: str) -> Dict:
                 "final_score": final_score_response["final_score"],
             }
         )
-
+        updateUserEvaluation(
+            userId=userId,
+            final_score_response=final_score_response,
+            risk_signals=device_fingerprint_response["response"]["response"]["riskCauses"],
+        )
         return utils.create_response(
             status=KEY_SUCCESS,
             message="succesfully computed final score",
@@ -203,3 +208,23 @@ async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
         })
         raise ValueError(f"Failed to parse userId: {str(e)}")       
     
+def updateUserEvaluation(userId: str, final_score_response, risk_signals: list):
+    client = MongoClient(secrets["mongodb_conn_string"])
+    db = client['BureauEYE']
+    collection = db['user_evaluation']  
+    update_data = {
+            "userID": userId,
+            "finalScore": final_score_response["final_score"],
+            "computedScores": {
+                "riskScore": final_score_response["component_scores"]["risk_score"],
+                "deviceRiskScore": final_score_response["component_scores"]["device_risk_score"],
+                "inputValidationScore": final_score_response["component_scores"]["input_validation_score"],
+                "networkValidationScore": final_score_response["component_scores"]["network_validation_score"],
+                "appScore": final_score_response["component_scores"]["app_score"],
+            },
+            "riskSignals": risk_signals,
+            "createdAt": int(time.time() * 1000)
+        }
+    transactions = collection.insert_one(update_data)
+    client.close()
+    return transactions
