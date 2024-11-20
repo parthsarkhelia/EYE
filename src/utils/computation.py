@@ -1,5 +1,4 @@
 def calculate_device_score(device_score) -> float:
-    """Calculate device component from e, p, f variables"""
     # return 0.75 * e + 0.5 * p + 0.3 * f
     if device_score == "VERY_HIGH":
         return 1000
@@ -42,7 +41,6 @@ def calculate_network_validation_score(
 
 
 def calculate_app_profile_score(downloaded_apps, account_apps) -> float:
-    """Calculate app presence score with penalties"""
     score = 0
     downloaded_set = set(downloaded_apps)
     account_set = set(account_apps)

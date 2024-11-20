@@ -73,7 +73,6 @@ def create_response(
     error: str = None,
     resp=None,
 ) -> dict:
-    """Create a standardized API response"""
     response = {
         "status": status,
         "timestamp": datetime.utcnow().isoformat(),

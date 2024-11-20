@@ -350,18 +350,20 @@ def fetchEmailAnalysisDetail(context):
     client.close()
     return result
 
-def get_all_details(context: Dict):
+async def get_all_details(context: Dict) -> Tuple[int, Dict]:
     try:
         response={}
         emailAnalysisDetails = fetchEmailAnalysisDetail(context)
+        logging.info("In Internal")
+        logging.info({"emailAnalysisDetails":emailAnalysisDetails})
         for emailAnalysisDetail in emailAnalysisDetails:
             output = {}
             output["emailAnalysis"]=emailAnalysisDetail
             output["userEvaluation"]=fetchUserEvaluation(emailAnalysisDetail.get("user_id"))
             response[emailAnalysisDetail.get("user_id")]=output
-        return response
+        return 200, response
     except Exception as e:
         logging.exception(
             {**context, "action": "delete_analysis_failed", "error": str(e)}
         )
-        return {"message": constant.PROCESSING_ERROR}
+        return 500, {"message": constant.PROCESSING_ERROR}

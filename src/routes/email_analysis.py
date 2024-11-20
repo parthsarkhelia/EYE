@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
-
+import logging
 from src.controller import email_analysis
 from src.decorator import api
 from src.models.email_analysis import (
@@ -118,9 +118,11 @@ async def delete_analysis(
 
 @router.get("/get-all-details")
 @api("Get all details")
-def get_all_details(request: Request, response: Response):
+async def get_all_details(request: Request, response: Response):
     context = request.state.context
-    status_code, resp = email_analysis.get_all_details(context)
+    logging.info("in get all details")
+    logging.info(context)
+    status_code, resp = await email_analysis.get_all_details(context)
     if not resp:
         status_code = 404
         resp = {"message": constant.RECORD_NOT_FOUND}

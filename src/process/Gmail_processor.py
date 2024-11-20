@@ -1,9 +1,9 @@
 import base64
 import email
 import json
+import logging
 import re
 import time
-import logging
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -11,7 +11,12 @@ from typing import Dict, List, Optional
 import requests
 from pydantic import BaseModel
 from pymongo import MongoClient
-from src.controller.email_analysis import create_analysis_from_stored_emails, StoredEmailAnalysisRequest
+
+from src.controller.email_analysis import (
+    StoredEmailAnalysisRequest,
+    create_analysis_from_stored_emails,
+)
+
 
 class EmailData(BaseModel):
     subject: str
@@ -27,9 +32,6 @@ class EmailData(BaseModel):
 
 class GmailFetcher:
     def __init__(self, access_token: str, mongo_uri: str, database_name: str):
-        """
-        Initialize the Gmail fetcher with authentication and database configuration.
-        """
         self.access_token = access_token
         self.headers = {"Authorization": f"Bearer {access_token}"}
         self.base_url = "https://www.googleapis.com/gmail/v1/users/me/messages"
@@ -41,10 +43,6 @@ class GmailFetcher:
         self.processed_emails = self.db.processed_emails
 
     def clean_email_address(self, email_str: str) -> str:
-        """
-        Clean email address by removing angle brackets and normalizing format.
-        Example: "John Doe <john@example.com>" -> "john@example.com"
-        """
         # Extract email address from string containing name and email
         email_pattern = r"[\w\.-]+@[\w\.-]+\.\w+"
         matches = re.findall(email_pattern, email_str)
@@ -53,9 +51,6 @@ class GmailFetcher:
         return email_str.replace("<", "").replace(">", "").strip().lower()
 
     def decode_body(self, payload: Dict) -> str:
-        """
-        Recursively decode email body from payload.
-        """
         if "body" in payload and "data" in payload["body"]:
             return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8")
 
@@ -73,9 +68,6 @@ class GmailFetcher:
         return ""
 
     def extract_email_data(self, raw_message: Dict, unique_id: str) -> EmailData:
-        """
-        Extract relevant email data from Gmail API response and convert to EmailData format.
-        """
         headers = {
             header["name"].lower(): header["value"]
             for header in raw_message["payload"]["headers"]
@@ -116,9 +108,6 @@ class GmailFetcher:
         return email_data
 
     def fetch_message(self, message_id: str) -> Optional[Dict]:
-        """
-        Fetch a single message from Gmail API.
-        """
         try:
             url = f"{self.base_url}/{message_id}"
             response = requests.get(url, headers=self.headers)
@@ -129,9 +118,6 @@ class GmailFetcher:
             return None
 
     def store_message(self, raw_message: Dict, email_data: EmailData) -> bool:
-        """
-        Store both raw and processed message data in MongoDB.
-        """
         try:
             # Store raw message with unique_id
             raw_message["stored_at"] = datetime.utcnow()
@@ -168,9 +154,6 @@ class GmailFetcher:
             return False
 
     def cleanup_raw_emails(self, unique_id: str):
-        """
-        Remove raw emails after successful processing.
-        """
         try:
             # Find all successfully processed emails for this unique_id
             processed = self.processed_emails.find({"unique_id": unique_id})
@@ -183,9 +166,6 @@ class GmailFetcher:
             print(f"Error during cleanup: {str(e)}")
 
     def process_messages(self, message_list: List[Dict]) -> Dict:
-        """
-        Process a list of messages, fetching and storing each one.
-        """
         # Generate unique identifier for this batch
         unique_id = str(uuid.uuid4())
 
@@ -228,8 +208,10 @@ class GmailFetcher:
         # logging.info({"unique_id":unique_id})
         return results
 
-def gmail_processor(context, access_token: str, mongoUri: str, dbName: str, data: List[Dict], uid: str):
 
+def gmail_processor(
+    context, access_token: str, mongoUri: str, dbName: str, data: List[Dict], uid: str
+):
     # Initialize fetcher
     fetcher = GmailFetcher(access_token, mongoUri, dbName)
 
@@ -248,8 +230,6 @@ def gmail_processor(context, access_token: str, mongoUri: str, dbName: str, data
             print(f"- {failed_id}")
     # Initialize StoredEmailAnalysisRequest
     request = StoredEmailAnalysisRequest(
-        unique_id=results["unique_id"],
-        user_id=uid,
-        settings={}
+        unique_id=results["unique_id"], user_id=uid, settings={}
     )
     create_analysis_from_stored_emails(context, request)

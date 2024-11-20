@@ -1,8 +1,10 @@
 import logging
-import uuid
 import time
+import uuid
 from typing import Dict, Tuple
+
 from pymongo import MongoClient
+
 from src.secrets import secrets
 from src.utils import computation, constant, parallel, utils
 
@@ -12,7 +14,6 @@ KEY_STATUS = "status"
 
 async def bureau_eye_submit(context, device_data, auth_credential: str) -> Dict:
     try:
-        """Process Android device data and perform necessary operations"""
         device_fingerprint_response = await get_device_insights(
             device_data=device_data, auth_credential=auth_credential
         )
@@ -180,7 +181,9 @@ async def get_device_insights(device_data: dict, auth_credential: str) -> Dict:
             message=f"Got Exception: {str(e)}",
         )
 
-from typing import Tuple, Optional
+
+from typing import Optional, Tuple
+
 
 async def get_user_details_from_userId(userId: str) -> Tuple[str, str, str]:
     try:
