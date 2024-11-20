@@ -366,7 +366,7 @@ def fetchEmailAnalysisDetail():
 
 
 def fetchUserEvaluation(user_id):
-    userEvaluation = mongo.user_evaluation.find_one({"user_id": user_id})
+    userEvaluation = mongo.user_evaluation.find_one({"userID": user_id})
     if userEvaluation:
         userEvaluation.pop("_id")
     return userEvaluation
