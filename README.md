@@ -1,2 +1,3 @@
-# Bureau-EYE
-Bureau EYE (Evaluate Your Entity)
+# EYE
+
+EYE - Evaluate Your Entity
